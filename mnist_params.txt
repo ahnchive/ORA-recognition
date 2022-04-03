@@ -1,0 +1,75 @@
+
+{
+ #############
+ # task info
+ #############
+ "task": "mnist", 
+ "num_classes": 10,
+ "num_targets": 1,
+ "image_dims": (1, 28, 28),
+
+ 
+ ######################
+ # training setting
+ ######################
+ "n_epochs": 100,
+ "lr": 0.0005,
+ "batch_size": 128,
+ "cuda": 0, # cuda device number
+
+ ##########################
+ # directories and logging
+ ##########################
+ "data_dir": "../data/",
+ "output_dir": "./results/mnist/" ,# where best performing model will be saved and log_dir is created 
+ "restore_file": None , # "./results/multimnist/Aug25_2514/state_checkpoint.pt", # checkpoint file to restore and resume training, if none, set as None
+ 
+ "save_checkpoint": True, # save checkpoint
+ "record_gradnorm": False, # record gradient size
+ "validate_after_howmany_epochs": 1, # validate after how many epoch
+ "best_val_acc": 0, # only save model that achieved val_acc above this value
+ "verbose": True, # whether print validation loss/acc
+ "abort_if_valacc_below": 0.8, # abort experiment if val_acc at 50 epoch is lower than criterion
+ 
+ ####################
+ # model architecture
+ ####################
+ "time_steps": 1,
+
+ # Encoder for feature extraction
+ "encoder_type": 'two-conv-layer', #'two-conv-layer', 'capsnet'
+ "enc_projection_type": None, # 'linear', None, 'rnn'
+ 
+ # Capsule Network 
+ "dim_pricaps": 8, # default is 8, primary caps dim, note z_size/dim_zcaps = num_primarycaps
+ "dim_objcaps": 16, # default is 16, final class object caps
+ "backg_objcaps": 0, # default is 0, the number of capsules for background
+ 
+ # Routing
+ "routings": 1, # default is 1, the number of dynamic routing
+ "routing_type": 'pd-recon', # default is original, 'pd-recon'
+ "min_coup": 0.5, # default is 0.5, if none, no minimum clipping for coupling coeff
+ "min_rscore": 0.5, # default is 0.5, if none, no minimum clipping for rscore (for recon routing)
+ 
+ # Decoder for reconstruction
+ "use_decoder": True, # default is True, whether there's decoder for reconstruction and use reconstruction loss
+ "decoder_type": 'fcn', #'two-transconv-layer', 'fcn'
+ "dec_projection_type": None, #"linear", None, 'rnn'
+ "reconstruct_only_one_capsule": True, # default is True, if False, reconstruction is based on all object capsules
+
+
+ # Reconstruction Mask (all None when time_steps==1)
+ "use_reconstruction_mask": True,
+ "mask_threshold": 0.1, # the threshold value to make boolean
+
+ ###############
+ # loss function
+ ###############
+ "class_loss_is_computed_on_what_step": 'every', # when timestep>1, 'sum', 'last' 
+ "recon_loss_is_computed_on_what_step": 'every', # when timestep>1, 'sum', 'last' 
+ "lam_recon": 0.5, # default is 0.5, the weight for reconstruction error
+
+
+ "clip_recon": False, # whether clip reconstruction at range 0-1
+
+ }
