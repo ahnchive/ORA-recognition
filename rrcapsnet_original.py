@@ -209,9 +209,9 @@ class AttentionWindow(nn.Module):
                 print(f'...with mask type {self.mask_type}, threshold {self.mask_threshold}, apply_method {self.mask_apply_method}')
                 
 
-    def forward(self, x, x_recon):
+    def forward(self, x, x_recon, timestep):
         
-        if not self.use_reconstruction_mask:
+        if not self.use_reconstruction_mask or timestep==1:
             x_mask = torch.ones(x.shape, device = x.device)
             x_input = x
         else:
@@ -916,7 +916,7 @@ class RRCapsNet(nn.Module):
             ##################
             # attending input (based on reconstruction mask from previous step, if the param set True)
             ##################
-            x_mask, x_input = self.input_window(x, x_recon_for_mask) #todo what if not detached? 
+            x_mask, x_input = self.input_window(x, x_recon_for_mask, timestep=t) #todo what if not detached? 
      
             #############
             # encoding feature
@@ -1144,7 +1144,7 @@ def partialmatch(y_pred: torch.Tensor, y_true:  torch.Tensor, n_targets=2):
 
     return accs
 
-def acc_fn(objcaps_len_step, y_true, acc_name):
+def acc_fn(objcaps_len_step, y_true, acc_name, single_step=None):
     '''
     1) topk accuracy: format should be top@k,
     2) 
@@ -1162,21 +1162,29 @@ def acc_fn(objcaps_len_step, y_true, acc_name):
         accs = topkacc(y_pred, y_true, topk=topk)
         
     elif acc_name =='dynamic':
-        def get_first_zero_index(x, axis=1):
-            cond = (x == 0)
-            return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
+        if single_step:
+            # get final prediction
+            y_pred = objcaps_len_step_narrow[:,-1]
+        #     y_pred = torch.sum(objcaps_len_step, dim=1)
+        #     y_pred = y_pred.narrow(dim=1,start=0, length=num_classes) # in case a background cap was added    
+            accs = topkacc(y_pred, y_true, topk=1)
+        else:
 
-        pstep = objcaps_len_step_narrow.max(dim=-1)[1]
-        pnow = pstep[:,1:]
-        pbefore = pstep[:,:-1]
+            def get_first_zero_index(x, axis=1):
+                cond = (x == 0)
+                return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
 
-        pdiff = (pnow-pbefore)
-        null_column = -99*torch.ones(pdiff.size(0),1).to(pdiff.device)
-        pdiff = torch.cat([null_column, pdiff], dim=1) # first step as null
-        pdiff[:,-1]=0 # final step as zero
-        nstep = get_first_zero_index(pdiff)
-        y_pred= torch.gather(pstep, 1, nstep).flatten()
-        accs = torch.eq(y_pred, y_true.max(dim=1)[1]).float()
+            pstep = objcaps_len_step_narrow.max(dim=-1)[1]
+            pnow = pstep[:,1:]
+            pbefore = pstep[:,:-1]
+
+            pdiff = (pnow-pbefore)
+            null_column = -99*torch.ones(pdiff.size(0),1).to(pdiff.device)
+            pdiff = torch.cat([null_column, pdiff], dim=1) # first step as null
+            pdiff[:,-1]=0 # final step as zero
+            nstep = get_first_zero_index(pdiff)
+            y_pred= torch.gather(pstep, 1, nstep).flatten()
+            accs = torch.eq(y_pred, y_true.max(dim=1)[1]).float()
         
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
@@ -1330,8 +1338,11 @@ def evaluate(model, x, y, args, acc_name, gtx=None):
         objcaps_len_step, x_recon_step = model(x)
         
         # compute batch loss and accuracy
-        loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)            
-        acc = acc_fn(objcaps_len_step, y, acc_name)
+        loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)
+        if args.time_steps==1:
+            acc = acc_fn(objcaps_len_step, y, acc_name, single_step=True)
+        else:
+            acc = acc_fn(objcaps_len_step, y, acc_name)
 
     return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step
 
