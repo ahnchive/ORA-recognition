@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from rrcapsnet_original import get_every_obj_rscore
 
-def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=15, **imshow_kwargs):
+def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=20, **imshow_kwargs):
     # row title, col title both should be vectors 
     
     if not isinstance(imgarray, np.ndarray):
@@ -24,15 +24,15 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
             
     if col_title is not None:
         for ax, col in zip(axs[0], col_title):
-            ax.set_title(col, fontsize=fontsize, color='green')
+            ax.set_title(col, fontsize=fontsize, color='black')
     
     if row_title is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='green')
+            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='black')
 
     if row_text is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, num_cols-1].text(w+1, h, row_text[row_idx], fontsize=15, color='green')
+            axs[row_idx, num_cols-1].text(w+1, h, row_text[row_idx], fontsize=fontsize, color='black')
             
     plt.tight_layout()
     plt.show()
@@ -145,20 +145,20 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
 
     for row_idx in range(num_rows):
-        axs[row_idx, max_obj_step[row_idx]+2].add_patch(Rectangle((0, 0), w-1, h-1, edgecolor = 'green', fill=False, lw=5))
+        axs[row_idx, max_obj_step[row_idx]+2].add_patch(Rectangle((0, 0), w-1, h-1, edgecolor = 'red', fill=False, lw=5))
 
     if col_title is not None:
         for ax, col in zip(axs[0], col_title):
-            ax.set_title(col, fontsize=fontsize, color='green')
+            ax.set_title(col, fontsize=fontsize, color='black')
 
     if row_title is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='green')
+            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='black')
 
     if col_text is not None:
         for row_idx in range(len(col_text)):
             for col_idx in range(num_cols):
-                axs[row_idx,col_idx].text(int(w/2), h+12, col_text[row_idx][col_idx], fontsize=12, color='white', ha='center')
+                axs[row_idx,col_idx].text(int(w/2), h+12, col_text[row_idx][col_idx], fontsize=12, color='gray', ha='center')
 
     plt.tight_layout()
     plt.show()
@@ -256,7 +256,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             else:
                 continue
         elif plot_trials_when == 'correct':
-            if correct_step[-1]: 
+            if correct_step[-1] and gt ==5: 
                 pass
             else:
                 continue
@@ -348,12 +348,12 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
 
 #     if row_title is not None:
 #         for row_idx in range(num_rows):
-#             axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='green')
+#             axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='black')
 
 #     if col_title is not None:
 #         for row_idx in range(len(col_title)):
 #             for col_idx in range(num_cols):
-#                 axs[row_idx,col_idx].set_xlabel(col_title[row_idx][col_idx], fontsize=fontsize, color='green')
+#                 axs[row_idx,col_idx].set_xlabel(col_title[row_idx][col_idx], fontsize=fontsize, color='black')
             
 #     plt.tight_layout()
 #     plt.show()
@@ -395,12 +395,12 @@ def plot(imgarray, row_title=None, col_title=None, fontsize=15, **imshow_kwargs)
 
     if row_title is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='green')
+            axs[row_idx, 0].set_ylabel(row_title[row_idx], fontsize=fontsize, color='black')
 
     if col_title is not None:
         for row_idx in range(len(col_title)):
             for col_idx in range(num_cols):
-                axs[row_idx,col_idx].set_xlabel(col_title[row_idx][col_idx], fontsize=fontsize, color='green')
+                axs[row_idx,col_idx].set_xlabel(col_title[row_idx][col_idx], fontsize=fontsize, color='black')
             
     plt.tight_layout()
     plt.show()
