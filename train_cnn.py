@@ -10,6 +10,9 @@ import os
 import random
 import numpy as np
 
+from loaddata import *
+from utils import *
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -39,6 +42,9 @@ class Net(nn.Module):
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
+        if len(target.size())>1:
+            target = torch.argmax(target, dim=1) # change from one hot to integer index
+
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
@@ -59,6 +65,9 @@ def test(model, device, test_loader):
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
+            if len(target.size())>1:
+                target = torch.argmax(target, dim=1) # change from one hot to integer index
+
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
@@ -98,6 +107,7 @@ def main():
                         help='For Saving the current Model')
     
     parser.add_argument('--exp-name', type=str, default='test')
+    parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
         
     args = parser.parse_args()
     
@@ -125,51 +135,57 @@ def main():
     
     device = torch.device("cuda" if use_cuda else "cpu")
 
-    train_kwargs = {'batch_size': args.batch_size}
-    test_kwargs = {'batch_size': args.test_batch_size}
-    if use_cuda:
-        cuda_kwargs = {'num_workers': 1,
-                       'pin_memory': True,
-                       'shuffle': True}
-        train_kwargs.update(cuda_kwargs)
-        test_kwargs.update(cuda_kwargs)
+#     train_kwargs = {'batch_size': args.batch_size}
+#     test_kwargs = {'batch_size': args.test_batch_size}
+#     if use_cuda:
+#         cuda_kwargs = {'num_workers': 1,
+#                        'pin_memory': True,
+#                        'shuffle': True}
+#         train_kwargs.update(cuda_kwargs)
+#         test_kwargs.update(cuda_kwargs)
 
-    transform=transforms.Compose([
-        transforms.ToTensor(),
-#         transforms.Normalize((0.1307,), (0.3081,))
-        ])
-    dataset1 = datasets.MNIST('../data', train=True, download=True,
-                       transform=transform)
-    dataset2 = datasets.MNIST('../data', train=False,
-                       transform=transform)
-    train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
-    test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
+#     transform=transforms.Compose([
+#         transforms.ToTensor(),
+# #         transforms.Normalize((0.1307,), (0.3081,))
+#         ])
+#     dataset1 = datasets.MNIST('../data', train=True, download=True,
+#                        transform=transform)
+#     dataset2 = datasets.MNIST('../data', train=False,
+#                        transform=transform)
+#     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
+#     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
+
+    train_loader, test_loader = fetch_dataloader('mnist', '../data', device, args.batch_size, train=True)
 
     model = Net().to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     
-    
-    previous_acc=0.
-    path_best=None
-    for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch)
-        current_acc= test(model, device, test_loader)
-        scheduler.step()
+    if args.print:
+        print('\n==> print model architecture')
+        print(model)
 
-        if (epoch%10==0) & (args.save_model):
-            path_save = args.output_dir +f'/epoch{epoch}.pt'
-            torch.save(model.state_dict(), path_save)
-        
-        if current_acc > previous_acc:
-            if path_best:
-                os.remove(path_best)
-            path_best =args.output_dir +f'/best_epoch{epoch}_{current_acc}.pt'
-            torch.save(model.state_dict(), path_best)
+        print('\n==> print model params')
+        count_parameters(model)
+    else:
+        previous_acc=0.
+        path_best=None
+        for epoch in range(1, args.epochs + 1):
+            train(args, model, device, train_loader, optimizer, epoch)
+            current_acc= test(model, device, test_loader)
+            scheduler.step()
+
+            if (epoch%10==0) & (args.save_model):
+                path_save = args.output_dir +f'/epoch{epoch}_{current_acc}.pt'
+                torch.save(model.state_dict(), path_save)
+
+            if current_acc > previous_acc:
+                if path_best:
+                    os.remove(path_best)
+                path_best =args.output_dir +f'/best_epoch{epoch}_{current_acc}.pt'
+                torch.save(model.state_dict(), path_best)
             
         
-
-
 if __name__ == '__main__':
     main()

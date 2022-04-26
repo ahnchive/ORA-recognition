@@ -52,28 +52,36 @@ def scale_image(x):
 #                     x = F.instance_norm(x)
     return x_new
       
-def scale_coef(x, dim=1, method='minmax', amplify=False, clip_under=None):
+def scale_coef(x, dim=1, vrange=(0.0, 1.0), num_bgcapsule_to_exclude=0):
     """
-    first dimension is [batch, ... , ...]
+    [batch, n_objcaps, n_pricaps] or [batch, n_objcaps]
     normalize over specified dimension, output keeps original shape
     """
-    if method=='minmax':
-        devmin = x - torch.min(x, dim=dim, keepdim=True)[0] 
-        maxmin = torch.max(x, dim=dim, keepdim=True)[0] - torch.min(x, dim=dim, keepdim=True)[0]
-        maxmin = torch.clip(maxmin, min=1e-6) # to avoid devision by zero
-        out = devmin/maxmin  
-
-    elif method == 'wta':
-        onehot = torch.zeros_like(x)
-        onehot[torch.arange(onehot.size(0)), x.argmax(dim=dim)] = 1.0
-        out = onehot
-    else:
-        raise NotImplementedError
     
-    if amplify:
-        out = 1.5*out
-    if clip_under:
-        out = torch.clip(out, min=clip_under)
+    if num_bgcapsule_to_exclude>0:
+        # x narrow to include only objects
+        x = x.narrow(dim=1,start=0, length=x.size(dim=1)-num_bgcapsule_to_exclude)
+
+    # scale value into range
+    devmin = x - torch.min(x, dim=dim, keepdim=True)[0] 
+    maxmin = torch.max(x, dim=dim, keepdim=True)[0] - torch.min(x, dim=dim, keepdim=True)[0]
+    maxmin = torch.clip(maxmin, min=1e-6) # to avoid devision by zero
+    out =  (vrange[1]- vrange[0])*devmin/maxmin +vrange[0]  
+
+#     # get max value index
+#     onehot = torch.zeros_like(x)
+#     onehot[torch.arange(onehot.size(0)), x.argmax(dim=dim)] = 1.0
+#     out = onehot
+
+
+    if num_bgcapsule_to_exclude>0:
+        # attach value for bgcapsule as zero
+        shape = list(x.size())
+        shape[1] =1 # change obj dimension value to 1
+        bgx =  vrange[0]*torch.ones(shape, device=x.device)
+        out = torch.cat([out, bgx], dim=1)
+    
+    out = torch.clip(out,min=0.5)
     
     return out
         
@@ -111,7 +119,7 @@ def compute_rscore(x, recon, method='error'):
     return rscore
 
 # get rscore over all possible objects; todo: subset of object hypothesis?
-def get_every_obj_rscore(x_input, objcaps, Decoder, scale=False, save_recon=False):
+def get_every_obj_rscore(x_input, objcaps, Decoder, save_recon=False):
     '''
     x_input, and recon should be in the same shape
     '''
@@ -138,10 +146,6 @@ def get_every_obj_rscore(x_input, objcaps, Decoder, scale=False, save_recon=Fals
 
     # stack rscore
     obj_rscore = torch.stack(obj_rscore, dim=1) #torch.Size([batch, out_num_caps])
-    
-    # whether normalize
-    if scale:
-        obj_rscore = scale_coef(obj_rscore, dim=1)
     
     # return outputs
     if save_recon:
@@ -283,6 +287,7 @@ class Encoder(nn.Module):
                 ('relu1', nn.ReLU()),
                 ('conv2', nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3,  stride=1, padding=0)),
                 ('relu2', nn.ReLU()),
+#                 ('bn1', nn.BatchNorm2d(num_features=64)),
                 ('pool', nn.MaxPool2d(kernel_size=2, padding=0)),
                 ('encoder-dropout', nn.Dropout(0.25)),
 #                 ('conv1', nn.Conv2d(in_channels=img_channels, out_channels=32, kernel_size=5, stride=1, padding=0)),
@@ -441,17 +446,16 @@ class PDReconCapsuleRouting(nn.Module):
     :param out_dim_caps: dimension of output capsules
     :param routings: number of iterations for the routing algorithm
     """
-    def __init__(self, in_num_caps, in_dim_caps, out_num_caps, out_dim_caps, routings, min_coup, min_rscore):
+    def __init__(self, in_num_caps, in_dim_caps, out_num_caps, out_dim_caps, routings, num_bgcapsule):
         super().__init__()
         self.in_num_caps = in_num_caps
         self.in_dim_caps = in_dim_caps
         self.out_num_caps = out_num_caps
         self.out_dim_caps = out_dim_caps
         self.routings = routings
-        self.min_rscore = min_rscore
-        self.min_coup = min_coup
         self.weight = nn.Parameter(0.1 * torch.randn(self.out_num_caps, self.in_num_caps, self.out_dim_caps, self.in_dim_caps))
-
+        self.num_bgcapsule = num_bgcapsule
+        
     def forward(self, incaps, x_input, Decoder):
         device = incaps.device
         batch_size = incaps.shape[0]
@@ -500,14 +504,13 @@ class PDReconCapsuleRouting(nn.Module):
 #                 self.b = torch.div(self.b, outcaps_before.norm(dim=-1))
 #                 self.b = F.cosine_similarity(outcaps, outcaps_hat_detached, dim=-1)
                 # use a MAX-MIN normalization to separate the coefficients (original was softmax)
-                self.c = scale_coef(self.b, dim=1, clip_under=self.min_coup)
+                self.c = scale_coef(self.b, dim=1, num_bgcapsule_to_exclude=self.num_bgcapsule)
 
                 # get recon score from current outcaps
                 # objcaps.size =[batch, out_num_caps, out_dim_caps]
                 objcaps = torch.squeeze(outcaps, dim=-2) 
-                obj_rscore = get_every_obj_rscore(x_input, objcaps, Decoder, scale=False, save_recon=False) #[batch, out_num_caps]
-                
-                obj_rscore = scale_coef(obj_rscore, dim=1, clip_under=self.min_rscore)
+                obj_rscore = get_every_obj_rscore(x_input, objcaps, Decoder, save_recon=False) #[batch, out_num_caps]
+                obj_rscore = scale_coef(obj_rscore, dim=1, num_bgcapsule_to_exclude=self.num_bgcapsule)
                 
                 #topk
 #                 topk=1
@@ -549,206 +552,6 @@ class PDReconCapsuleRouting(nn.Module):
                 break
 
             
-
-        outputs = {}
-        outputs['coups'] = coups
-        outputs['betas'] = betas
-        
-        outputs['rscores'] = rscores
-        outputs['recon_coups'] = recon_coups
-        outputs['outcaps_len'] = outcapslen
-        outputs['outcaps_len_before'] =outcapslen_before
-        
-        outcaps_squeeze = torch.squeeze(outcaps, dim=-2)
-        
-        return outcaps_squeeze, outputs
-
-
-
-class OrigCapsuleRouting(nn.Module):
-    """
-    The dense capsule layer. It is similar to Dense (FC) layer. Dense layer has `in_num` inputs, each is a scalar, the
-    output of the neuron from the former layer, and it has `out_num` output neurons. DenseCapsule just expands the
-    output of the neuron from scalar to vector. So its input size = [None, in_num_caps, in_dim_caps] and output size = \
-    [None, out_num_caps, out_dim_caps]. For Dense Layer, in_dim_caps = out_dim_caps = 1.
-
-    :param in_num_caps: number of cpasules inputted to this layer
-    :param in_dim_caps: dimension of input capsules
-    :param out_num_caps: number of capsules outputted from this layer
-    :param out_dim_caps: dimension of output capsules
-    :param routings: number of iterations for the routing algorithm
-    """
-    def __init__(self, in_num_caps, in_dim_caps, out_num_caps, out_dim_caps, routings, min_coup):
-        super().__init__()
-        self.in_num_caps = in_num_caps
-        self.in_dim_caps = in_dim_caps
-        self.out_num_caps = out_num_caps
-        self.out_dim_caps = out_dim_caps
-        self.routings = routings
-        self.min_coup = min_coup
-        assert self.routings > 0, 'The \'routings\' should be > 0.'
-        self.weight = nn.Parameter(0.1 * torch.randn(self.out_num_caps, self.in_num_caps, self.out_dim_caps, self.in_dim_caps))
-
-
-    def forward(self, incaps):
-        device = incaps.device
-        batch_size = incaps.shape[0]
-        
-        # initialize coefficients 
-        self.b = torch.zeros(batch_size, self.out_num_caps, self.in_num_caps, device=device) # part-whole matching
-        self.c = torch.ones(batch_size, self.out_num_caps, self.in_num_caps, device=device) # normalized b
-
-        # incaps.size=[batch, in_num_caps, in_dim_caps]
-        # expanded to    [batch, 1, in_num_caps, in_dim_caps,  1]
-        # weight.size   =[out_num_caps, in_num_caps, out_dim_caps, in_dim_caps]
-        # torch.matmul: [out_dim_caps, in_dim_caps] x [in_dim_caps, 1] -> [out_dim_caps, 1]
-        # => outcaps_hat.size =[batch, out_num_caps, in_num_caps, out_dim_caps]
-        outcaps_hat = torch.squeeze(torch.matmul(self.weight, incaps[:, None, :, :, None]), dim=-1)
-        
-        # In forward pass, `outcaps_hat_detached` = `outcaps_hat`;
-        # In backward, no gradient can flow from `outcaps_hat_detached` back to `outcaps_hat`.
-        outcaps_hat_detached = outcaps_hat.detach()
-
-        # keep all the coupling coefficients for all routing steps 
-        coups = []; betas = []
-        for i in range(self.routings):
-            # record coups and betas
-            coups.append(self.c.detach())
-            betas.append(self.b.detach())
-            
-            # Use `outcaps_hat_detached` to update `b`. No gradients flow on this path.       
-            if i < self.routings-1: 
-                outcaps = squash(torch.sum(self.c[:, :, :, None] * outcaps_hat_detached, dim=-2, keepdim=True))
-                           
-                # update beta and coupling coefficients
-                # outcaps.size       =[batch, out_num_caps, 1,           out_dim_caps]
-                # outcaps_hat_detached.size=[batch, out_num_caps, in_num_caps, out_dim_caps]
-                # => resulting b.size          =[batch, out_num_caps, in_num_caps]
-                self.b = self.b + torch.sum(outcaps * outcaps_hat_detached, dim=-1) ## todo; whether accumulate?                
-                # use a MAX-MIN normalization to separate the coefficients (original was softmax)
-                self.c = scale_coef(self.b, dim=1)
-
-               
-            # At last iteration, use `outcaps_hat` to compute `outcaps` in order to backpropagate gradient
-            elif i == self.routings-1:
-                # c.size expanded to [batch, out_num_caps, in_num_caps, 1           ]
-                # outcaps_hat.size     =   [batch, out_num_caps, in_num_caps, out_dim_caps]
-                # => outcaps.size=   [batch, out_num_caps, 1,           out_dim_caps]
-                outcaps = squash(torch.sum(self.c[:, :, :, None] * outcaps_hat, dim=-2, keepdim=True))
-                break
-
-             
-        outputs = {}
-        outputs['coups'] = coups
-        outputs['betas'] = betas
-        outcaps_squeezed = torch.squeeze(outcaps, dim=-2) # [batch, out_num_caps, out_dim_caps]
-        return outcaps_squeezed, outputs
-
-    
-
-
-class TDReconCapsuleRouting(nn.Module):
-    """
-    The dense capsule layer. It is similar to Dense (FC) layer. Dense layer has `in_num` inputs, each is a scalar, the
-    output of the neuron from the former layer, and it has `out_num` output neurons. DenseCapsule just expands the
-    output of the neuron from scalar to vector. So its input size = [None, in_num_caps, in_dim_caps] and output size = \
-    [None, out_num_caps, out_dim_caps]. For Dense Layer, in_dim_caps = out_dim_caps = 1.
-
-    :param in_num_caps: number of cpasules inputted to this layer
-    :param in_dim_caps: dimension of input capsules
-    :param out_num_caps: number of capsules outputted from this layer
-    :param out_dim_caps: dimension of output capsules
-    :param routings: number of iterations for the routing algorithm
-    """
-    def __init__(self, in_num_caps, in_dim_caps, out_num_caps, out_dim_caps, routings, min_coup, min_rscore):
-        super().__init__()
-        self.in_num_caps = in_num_caps
-        self.in_dim_caps = in_dim_caps
-        self.out_num_caps = out_num_caps
-        self.out_dim_caps = out_dim_caps
-        self.routings = routings
-        self.min_rscore = min_rscore
-        self.min_coup = min_coup
-        self.weight = nn.Parameter(0.1 * torch.randn(self.out_num_caps, self.in_num_caps, self.out_dim_caps, self.in_dim_caps))
-        print('top-down based recon capsule is used')
-
-    def forward(self, incaps, x_input, Decoder, obj_rscore):
-        device = incaps.device
-        batch_size = incaps.shape[0]
-        
-        # initialize coefficients
-        self.b = torch.zeros(batch_size, self.out_num_caps, self.in_num_caps, device=device) # part-whole matching
-        self.c = torch.ones(batch_size, self.out_num_caps, self.in_num_caps, device=device) # normalized b
-#         self.r = torch.ones(batch_size, self.out_num_caps, self.in_num_caps, device=device) # reconstruction scores 
-            # modulate coefficients based on recon error
-        obj_rscore = scale_coef(obj_rscore, dim=1, clip_under=self.min_rscore)
-        self.r = obj_rscore[:,:,None].repeat(1,1,self.in_num_caps) # tile to c.size, from [batch, out_num_caps] to [batch, out_num_caps,  in_num_caps]            
-        self.rc = torch.ones(batch_size, self.out_num_caps, self.in_num_caps, device=device) # reconstruction scores
-        
-        # incaps.size=[batch, in_num_caps, in_dim_caps]
-        # expanded to    [batch, 1, in_num_caps, in_dim_caps,  1]
-        # weight.size   =[out_num_caps, in_num_caps, out_dim_caps, in_dim_caps]
-        # torch.matmul: [out_dim_caps, in_dim_caps] x [in_dim_caps, 1] -> [out_dim_caps, 1]
-        # => outcaps_hat.size =[batch, out_num_caps, in_num_caps, out_dim_caps]
-        outcaps_hat = torch.squeeze(torch.matmul(self.weight, incaps[:, None, :, :, None]), dim=-1)
-        
-        # In forward pass, `outcaps_hat_detached` = `outcaps_hat`;
-        # In backward, no gradient can flow from `outcaps_hat_detached` back to `outcaps_hat`.
-        outcaps_hat_detached = outcaps_hat.detach()
-
-        # keep all the coupling coefficients for all routing steps; todo: remove lists for visualization
-        coups = []; betas=[]; rscores = []; recon_coups = []
-        outcapslen = []; outcapslen_before = [] # before and after recon routing applied
-        
-        for i in range(self.routings):
-            # record coups and betas
-            coups.append(self.c.detach())
-            betas.append(self.b.detach())
-            rscores.append(self.r.detach())
-            recon_coups.append(self.rc.detach())
-            
-            # Use `outcaps_hat_detached` to update `b`. No gradients flow on this path.       
-            if i < self.routings-1: 
-
-                outcaps = squash(torch.sum(self.rc[:, :, :, None] * outcaps_hat_detached, dim=-2, keepdim=True))
-                outcapslen.append(outcaps.norm(dim=-1).squeeze(-1).detach())
-                
-                # for visualization
-                outcaps_before = squash(torch.sum(self.c[:, :, :, None] * outcaps_hat_detached, dim=-2, keepdim=True))
-                outcapslen_before.append(outcaps_before.norm(dim=-1).squeeze(-1).detach())
-                
-                # update beta and coupling coefficients
-                # outcaps.size       =[batch, out_num_caps, 1,           out_dim_caps]
-                # outcaps_hat_detached.size=[batch, out_num_caps, in_num_caps, out_dim_caps]
-                # => resulting b.size          =[batch, out_num_caps, in_num_caps]
-                self.b = self.b + torch.sum(outcaps * outcaps_hat_detached, dim=-1) ## todo; whether accumulate?                
-                # use a MAX-MIN normalization to separate the coefficients (original was softmax)
-                self.c = scale_coef(self.b, dim=1, clip_under=self.min_coup)
-
-                # get recon score from current outcaps
-                # objcaps.size =[batch, out_num_caps, out_dim_caps]
-                objcaps = torch.squeeze(outcaps, dim=-2) # todo; outcaps_before_rscore
-
-                self.rc = self.c*self.r
-    #             self.rc = scale_coef(self.rc, dim=-1, method='minmax', clip_under=None)
-    #                 self.c = 0.8*self.c + 0.8*self.r
-    #                 self.c = F.softmax(self.c, dim=1)
-    
-
-            # At last iteration, use `outcaps_hat` to compute `outcaps` in order to backpropagate gradient
-            elif i == self.routings-1:
-                # c.size expanded to [batch, out_num_caps, in_num_caps, 1           ]
-                # outcaps_hat.size     =   [batch, out_num_caps, in_num_caps, out_dim_caps]
-                # => outcaps.size=   [batch, out_num_caps, 1,           out_dim_caps]
-                outcaps = squash(torch.sum(self.rc[:, :, :, None] * outcaps_hat, dim=-2, keepdim=True))
-                outcapslen.append(outcaps.norm(dim=-1).squeeze(-1).detach())
-                
-                # for visualization
-                outcaps_before = squash(torch.sum(self.c[:, :, :, None] * outcaps_hat, dim=-2, keepdim=True))
-                outcapslen_before.append(outcaps_before.norm(dim=-1).squeeze(-1).detach())
-                
-                break
-
 
         outputs = {}
         outputs['coups'] = coups
@@ -812,41 +615,22 @@ class RRCapsNet(nn.Module):
         
 
         # capsule network (pricaps --> objcaps)
-        print(f'ROUTINGS # {args.routings}, TYPE: {args.routing_type}')
-        print(f'...min_coup: {args.min_coup}, min_rscore: {args.min_rscore}')
-        self.routing_type = args.routing_type
+        print(f'ROUTINGS # {args.routings}')
         self.dim_pricaps = args.dim_pricaps
         self.num_pricaps = self.encoder.num_caps
         self.num_objcaps = args.num_classes + args.backg_objcaps
         self.dim_objcaps = args.dim_objcaps
         
-        if self.routing_type == 'original': # original dynamic routing
-            self.capsule_routing = OrigCapsuleRouting(in_num_caps= self.num_pricaps, 
-                                                in_dim_caps= self.dim_pricaps,
-                                                out_num_caps= self.num_objcaps,
-                                                out_dim_caps= self.dim_objcaps, 
-                                                routings= args.routings,
-                                                min_coup = args.min_coup)
+        self.capsule_routing = PDReconCapsuleRouting(in_num_caps= self.num_pricaps, 
+                                            in_dim_caps= self.dim_pricaps,
+                                            out_num_caps= self.num_objcaps,
+                                            out_dim_caps=self.dim_objcaps, 
+                                            routings= args.routings,
+                                            num_bgcapsule = args.backg_objcaps)
 
-        elif self.routing_type == 'pd-recon': # use recon error for routing                
-            self.capsule_routing = PDReconCapsuleRouting(in_num_caps= self.num_pricaps, 
-                                                in_dim_caps= self.dim_pricaps,
-                                                out_num_caps= self.num_objcaps,
-                                                out_dim_caps=self.dim_objcaps, 
-                                                routings= args.routings,
-                                                min_coup = args.min_coup,
-                                                min_rscore = args.min_rscore)
 
-        elif self.routing_type == 'td-recon': # use recon error for routing                
-            self.capsule_routing = TDReconCapsuleRouting(in_num_caps= self.num_pricaps, 
-                                                in_dim_caps= self.dim_pricaps,
-                                                out_num_caps= self.num_objcaps,
-                                                out_dim_caps=self.dim_objcaps, 
-                                                routings= args.routings,
-                                                min_coup = args.min_coup,
-                                                min_rscore = args.min_rscore)
-            
 
+        print(f'Object #: {self.num_objcaps}, BG Capsule #: {args.backg_objcaps}')
         # decoder (objcaps--> reconstruction)
         self.use_decoder = args.use_decoder # whether use decoder for reconstruction 
         if self.use_decoder:
@@ -927,19 +711,13 @@ class RRCapsNet(nn.Module):
             ######################
             # capsule layer: dynamic feature routing for classification
             ######################
-            if self.routing_type == 'original': # original dynamic routing
-                objcaps, _ =  self.capsule_routing(pricaps) # objectcaps [n_batch, n_objects(class+bkg), dim_objectcaps] 
-            elif self.routing_type == 'pd-recon': # use recon error for routing
-                # copy decoder first and make it eval mode
-                decoder_copy = copy.deepcopy(self.decoder)
-                for param in decoder_copy.parameters():
-                    param.requires_grad = False
-                decoder_copy.eval()
-                
-                objcaps, _=  self.capsule_routing(pricaps, x_input.detach(), decoder_copy) # objectcaps [n_batch, n_objects(class+bkg), dim_objectcaps] 
-#             elif self.routing_type == 'td-recon':
-#                 objcaps, _=  self.capsule_routing(pricaps, x_input.detach(), self.decoder, obj_rscore) # objectcaps [n_batch, n_objects(class+bkg), dim_objectcaps]
-#                 obj_rscore = get_every_obj_rscore(x_input, objcaps.detach(), self.decoder, scale=True)  #[n_batch, n_objects]
+            # copy decoder first and make it eval mode
+            decoder_copy = copy.deepcopy(self.decoder)
+            for param in decoder_copy.parameters():
+                param.requires_grad = False
+            decoder_copy.eval()
+
+            objcaps, _=  self.capsule_routing(pricaps, x_input.detach(), decoder_copy) # objectcaps [n_batch, n_objects(class+bkg), dim_objectcaps] 
 
                 
             # save classification output for each step
@@ -976,9 +754,10 @@ class RRCapsNet(nn.Module):
 
                     # get final recon
                     x_recon = x_recon_obj + x_recon_bkg
-                        
+                    x_recon_for_mask = x_recon_obj.detach()    
                 else: # or recon from all capsules combined
-                    x_recon, h_dec = self.decoder(objcaps, h_dec) # h_dec is only used when decoder use rnn projection                    
+                    x_recon, h_dec = self.decoder(objcaps, h_dec) # h_dec is only used when decoder use rnn projection
+                    x_recon_for_mask = x_recon.detach()
 
                
                 if self.clip_recon:
@@ -987,7 +766,7 @@ class RRCapsNet(nn.Module):
                 # save reconstruction output
                 x_recon_step[:,t-1:t,:,:,:] = torch.unsqueeze(x_recon, 1)
                 
-                x_recon_for_mask = x_recon.detach()
+                
                 
                 ###########################
                 # create weighted recon for mask
@@ -1228,7 +1007,7 @@ def train_epoch(model, train_dataloader, optimizer, epoch, writer, args):
 
             # forward pass
             objcaps_len_step, x_recon_step = model(x)
-            
+
             # compute loss for this batch and append it to training loss
             loss, _, _ = loss_fn(objcaps_len_step, y, x_recon_step, x, args, 
                                  gtx=gtx, use_recon_loss = args.use_decoder) 

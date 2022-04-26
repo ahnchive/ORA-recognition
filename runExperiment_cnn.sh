@@ -9,11 +9,10 @@
 #         done
 #     done
 # done
-declare -a expnames=("test" "run1" "run2" "run3" "run4" "run5")
 
+declare -a expnames=("test" "trainsplit_cnn1" "trainsplit_cnn2" "trainsplit_cnn3" "trainsplit_cnn4" "trainsplit_cnn5")
 for rseed in 1 2 3 4 5; do
-    python train_rrcapsnet.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --epoch 50 --expname ${expnames[$rseed]}
-    
+    python train_cnn.py --seed $rseed --exp-name ${expnames[$rseed]}
 done
 
 

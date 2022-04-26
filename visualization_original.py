@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
-from rrcapsnet_original import get_every_obj_rscore
+from rrcapsnet_original import get_every_obj_rscore, scale_coef
 
 def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=20, **imshow_kwargs):
     # row title, col title both should be vectors 
@@ -58,8 +58,8 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
                     annot_kws={'fontsize':7},  # Reduce size of label to fit
                     fmt='.2f',          # Interpret labels as strings
                     square=True,     # Force square cells
-                    vmax=1,         # Ensure same 
-                    vmin=0,          # color scale
+                    vmax=1.1**2,         # Ensure same 
+                    vmin=0.9**2,          # color scale
                     linewidth=0.01,  # Add gridlines
                     linecolor="black",# Adjust gridline color
                     ax=axs[n,0],        # Arrange in subplot
@@ -184,8 +184,9 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
 #             _, obj_recon = get_every_obj_rscore(x_input, objcaps,  model.decoder, scale=True, save_recon=True, affine_inv=None, affine_params=None) #  torch.Size([1000, 10]), torch.Size([1000, 10, 1, 28, 28])
 #             # get rscore with affine transformed
 #             obj_rscore = get_every_obj_rscore(x_input, objcaps,  model.decoder, scale=True, save_recon=False, affine_inv= model.stn.affine_inv, affine_params=affine_params) #  torch.Size([1000, 10]), torch.Size([1000, 10, 1, 28, 28])
-        obj_rscore, obj_recon = get_every_obj_rscore(x_input, objcaps,  model.decoder, scale=True, save_recon=True) #  torch.Size([1000, 10]), torch.Size([1000, 10, 1, 28, 28])
-            
+        obj_rscore, obj_recon = get_every_obj_rscore(x_input, objcaps,  model.decoder, save_recon=True) #  torch.Size([1000, 10]), torch.Size([1000, 10, 1, 28, 28])
+        obj_rscore = scale_coef(obj_rscore, dim=1)
+        
         obj_rscore_step.append(obj_rscore)
         obj_recon_step.append(obj_recon)
     
