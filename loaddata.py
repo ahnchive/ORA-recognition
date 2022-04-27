@@ -70,6 +70,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
     kwargs = {'num_workers': 1, 'pin_memory': True} if device == 'cuda' else {}
     
     if task == 'mnist': 
+        print('original mnist dataset')
         transforms = T.Compose([T.ToTensor()])
         dataset = datasets.MNIST(root=data_dir, train=train, download=download, transform=transforms,
                                 target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
@@ -114,11 +115,12 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
             test_dataset = TensorDataset(input_ims, ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
+
         
     elif task == 'mnist_recon': 
         data_root = '../data/MNIST_recon/'
-        train_datafile = 'train_blur_k5s1.pt'#'train_clean.pt'#'train_recon_combine_x1.pt'
-        test_datafile=  'test_blur_k5s1.pt' #'test_clean.pt'#'test_recon_combine_x1.pt'
+        train_datafile = 'train_recon_combine_x1_blot5bg.pt' #'train_blur_k5s1.pt'#'train_clean.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
+        test_datafile='test_recon_combine_x1_blot5bg.pt' # 'test_blur_k5s1.pt' #'test_clean.pt'#'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
         print(train_datafile, test_datafile)
         
         if train:

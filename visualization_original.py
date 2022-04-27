@@ -58,8 +58,8 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
                     annot_kws={'fontsize':7},  # Reduce size of label to fit
                     fmt='.2f',          # Interpret labels as strings
                     square=True,     # Force square cells
-                    vmax=1.1**2,         # Ensure same 
-                    vmin=0.9**2,          # color scale
+                    vmax=1.0,         # Ensure same 
+                    vmin=0.5**2,          # color scale
                     linewidth=0.01,  # Add gridlines
                     linecolor="black",# Adjust gridline color
                     ax=axs[n,0],        # Arrange in subplot
