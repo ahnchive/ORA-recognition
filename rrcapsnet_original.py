@@ -290,12 +290,6 @@ class Encoder(nn.Module):
 #                 ('bn1', nn.BatchNorm2d(num_features=64)),
                 ('pool', nn.MaxPool2d(kernel_size=2, padding=0)),
                 ('encoder-dropout', nn.Dropout(0.25)),
-#                 ('conv1', nn.Conv2d(in_channels=img_channels, out_channels=32, kernel_size=5, stride=1, padding=0)),
-#                 ('relu1', nn.ReLU()),
-#                 ('conv2', nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3,  stride=1, padding=0)),
-#                 ('relu2', nn.ReLU()),
-# #                 ('bn1', nn.BatchNorm2d(num_features=self.conv_nfilters)),
-#                 ('pool', nn.MaxPool2d(kernel_size=2, padding=0)),
                 ('capsulate', nnCapsulate(dim_caps=self.dim_caps, num_caps=num_caps))
             ]))
             
@@ -503,6 +497,7 @@ class PDReconCapsuleRouting(nn.Module):
                 self.b = torch.sum(outcaps * outcaps_hat_detached, dim=-1) ## todo; whether accumulate?     
 #                 self.b = torch.div(self.b, outcaps_before.norm(dim=-1))
 #                 self.b = F.cosine_similarity(outcaps, outcaps_hat_detached, dim=-1)
+
                 # use a MAX-MIN normalization to separate the coefficients (original was softmax)
                 self.c = scale_coef(self.b, dim=1, num_bgcapsule_to_exclude=self.num_bgcapsule)
 
@@ -511,21 +506,11 @@ class PDReconCapsuleRouting(nn.Module):
                 objcaps = torch.squeeze(outcaps, dim=-2) 
                 obj_rscore = get_every_obj_rscore(x_input, objcaps, Decoder, save_recon=False) #[batch, out_num_caps]
                 obj_rscore = scale_coef(obj_rscore, dim=1, num_bgcapsule_to_exclude=self.num_bgcapsule)
-                
-                #topk
-#                 topk=1
-#                 topkvalue = obj_rscore.topk(topk,dim=1, sorted=True)[0][:,topk-1]
-#                 topk_index = obj_rscore>=topkvalue.view(-1,1)
-#                 utopk_index = obj_rscore<topkvalue.view(-1,1)
-#                 obj_rscore = 0.5*utopk_index + 1.0*topk_index
-                
-                #bottom3
+                                
                 # modulate coefficients based on recon error
                 self.r = obj_rscore[:,:,None].repeat(1,1,self.in_num_caps) # tile to c.size, from [batch, out_num_caps] to [batch, out_num_caps,  in_num_caps]
                 self.rc = self.c*self.r
-    #             self.rc = scale_coef(self.rc, dim=-1, method='minmax', clip_under=None)
-    #                 self.c = 0.8*self.c + 0.8*self.r
-    #                 self.c = F.softmax(self.c, dim=1)
+
 
             # At last iteration, use `outcaps_hat` to compute `outcaps` in order to backpropagate gradient
             elif i == self.routings-1:
@@ -679,7 +664,9 @@ class RRCapsNet(nn.Module):
         # run model forward
         for t in range(1, self.time_steps+1):
             
+            #############################
             # get initial reconstruction mask, only when test phase
+            #############################
 #             if t==1:
 #                 obj_rscore, obj_recon = get_every_obj_rscore(x, objcaps.detach(), self.decoder, scale=False, save_recon=True)  #[n_batch, n_objects]
 # #                 obj_prob =  objcaps_len #[n_batch, n_objects]
@@ -934,9 +921,6 @@ def acc_fn(objcaps_len_step, y_true, acc_name, single_step=None):
     if 'top' in acc_name:
         # get final prediction
         y_pred = objcaps_len_step_narrow[:,-1]
-    #     y_pred = torch.sum(objcaps_len_step, dim=1)
-    #     y_pred = y_pred.narrow(dim=1,start=0, length=num_classes) # in case a background cap was added    
-
         topk = int(acc_name.split('@')[1])
         accs = topkacc(y_pred, y_true, topk=topk)
         
@@ -944,8 +928,6 @@ def acc_fn(objcaps_len_step, y_true, acc_name, single_step=None):
         if single_step:
             # get final prediction
             y_pred = objcaps_len_step_narrow[:,-1]
-        #     y_pred = torch.sum(objcaps_len_step, dim=1)
-        #     y_pred = y_pred.narrow(dim=1,start=0, length=num_classes) # in case a background cap was added    
             accs = topkacc(y_pred, y_true, topk=1)
         else:
 
@@ -1043,57 +1025,6 @@ def train_epoch(model, train_dataloader, optimizer, epoch, writer, args):
             pbar.update()
     
     return losses.avg
-
-# def train_epoch(model, train_dataloader, optimizer, epoch, writer, args):
-#     """
-#     for each batch:
-#         - forward pass  
-#         - compute loss
-#         - param update
-#     """    
-#     losses = AverageMeter('Loss', ':.4e')
-    
-#     model.train() 
-#     with tqdm(total=len(train_dataloader), desc='epoch {} of {}'.format(epoch, args.n_epochs)) as pbar:
-# #     time.sleep(0.1)        
-        
-#         # load batch from dataloader 
-#         for i, (x, y) in enumerate(train_dataloader):
-#             global_step = (epoch-1) * len(train_dataloader) + i + 1 #global batch number
-
-#             # load dataset on device
-# #             x = x.view(x.shape[0], -1).to(args.device)
-#             x = x.to(args.device)
-#             y = y.to(args.device)
-
-
-#             # forward pass
-#             objcaps_len_step, x_recon_step, x_input_step, x_mask_step = model(x)
-            
-#             # compute loss for this batch and append it to training loss
-#             loss, _, _ = loss_fn(objcaps_len_step, y, x_recon_step, x, args)
-#             losses.update(loss.item(), x.size(0))
-            
-#             # minibatch update; zero out previous gradients and backward pass
-#             optimizer.zero_grad()
-#             loss.backward()
-            
-#             # record grad norm and clip to prevent exploding gradients
-#             if args.record_gradnorm:
-#                 grad_norm = 0
-#                 for name, p in model.named_parameters():
-#                     grad_norm += p.grad.norm().item() if p.grad is not None else 0
-#                 writer.add_scalar('grad_norm', grad_norm, global_step)                
-#             nn.utils.clip_grad_norm_(model.parameters(), 5)
-
-#             # update param
-#             optimizer.step()
-
-#             # end of each batch, update tqdm tracking
-#             pbar.set_postfix(batch_loss='{:.3f}'.format(loss.item()))
-#             pbar.update()
-    
-#     return losses.avg    
 
 def evaluate(model, x, y, args, acc_name, gtx=None):
     """
