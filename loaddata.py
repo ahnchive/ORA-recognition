@@ -34,9 +34,10 @@ import random
 #         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
     
 
-def prepare_train_val(train_dataset, batch_size, kwargs, validation_by):
+def prepare_train_val(train_dataset, test_dataset, batch_size, kwargs, validation_by):
+    print('validation by ', validation_by)
+    
     if validation_by == 'mnistc-mini':
-        print('validation by ', validation_by)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
         val_input_ims, val_ys = torch.load('../data/MNIST_C/mnistc_mini.pt')
         val_dataset = TensorDataset(val_input_ims, val_ys)
@@ -49,8 +50,11 @@ def prepare_train_val(train_dataset, batch_size, kwargs, validation_by):
         train_set, val_set = torch.utils.data.random_split(train_dataset, split_size, generator=torch.Generator()) # torch.Generator().manual_seed(0)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
         val_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs)
-        print('validation by ', validation_by)
         print(f'# train: {n_train}, # val: {n_val}')
+
+    elif validation_by == 'test':
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
+        val_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs)
 
     return train_dataloader, val_dataloader
         
@@ -69,36 +73,39 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
     """
     kwargs = {'num_workers': 1, 'pin_memory': True} if device == 'cuda' else {}
     
+    ################
+    # load taskwise dataset
+    ################
     if task == 'mnist': 
         print('original mnist dataset')
         transforms = T.Compose([T.ToTensor()])
-        dataset = datasets.MNIST(root=data_dir, train=train, download=download, transform=transforms,
+        dataset1 = datasets.MNIST(root=data_dir, train=True, download=download, transform=transforms,
                                 target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
-        if train: 
-            train_dataloader, val_dataloader = prepare_train_val(dataset, batch_size, kwargs, validation_by='train-split')
-            return train_dataloader, val_dataloader
-        else:
-            return DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs)
+        dataset2 = datasets.MNIST(root=data_dir, train=False, download=download, transform=transforms,
+                                target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
 
+    elif task == 'mnist_shift': 
+        data_root = '../data/MNIST_shift/'
+        train_datafile = 'train_shift_by_2pixel.pt'
+        test_datafile= 'test_shift_by_2pixel.pt' 
+        print(train_datafile, test_datafile)
+
+        input_ims, ys = torch.load(data_root+train_datafile)
+        dataset1 = TensorDataset(input_ims, ys)
+        input_ims, ys = torch.load(data_root+test_datafile)
+        dataset2 = TensorDataset(input_ims, ys)   
         
     elif task == 'mnist_recon': 
         data_root = '../data/MNIST_recon/'
         train_datafile = 'train_blur_k5s1.pt'#'train_clean.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
         test_datafile= 'test_blur_k5s1.pt' #'test_clean.pt'#'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
         print(train_datafile, test_datafile)
-        
-        if train:
-            input_ims, gt_ims, ys = torch.load(data_root+train_datafile)
-            dataset = TensorDataset(input_ims, gt_ims, ys)
-            train_dataloader, val_dataloader = prepare_train_val(dataset, batch_size, kwargs, validation_by='train-split')
-            return train_dataloader, val_dataloader
-                         
-        else:
-            input_ims, gt_ims, ys = torch.load(data_root+test_datafile)
-            test_dataset = TensorDataset(input_ims, gt_ims, ys)
-            test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
-            return test_dataloader
 
+        input_ims, gt_ims, ys = torch.load(data_root+train_datafile)
+        dataset1 = TensorDataset(input_ims, gt_ims, ys)
+        input_ims, gt_ims, ys = torch.load(data_root+test_datafile)
+        dataset2 = TensorDataset(input_ims, gt_ims, ys)        
+        
     elif task == 'mnist_c_mini': 
         if train:
             raise NotImplementedError
@@ -107,6 +114,21 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
+
+    #################
+    # load data loader
+    #################
+    if train: 
+        train_dataloader, val_dataloader = prepare_train_val(dataset1, dataset2, batch_size, kwargs, validation_by='train-split')
+        return train_dataloader, val_dataloader
+    else:
+        return DataLoader(dataset2, batch_size=batch_size, shuffle=False, drop_last=False, **kwargs)
+
+        
+
+        
+
+
 
         
 

@@ -37,14 +37,17 @@ parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
 parser.add_argument('--task', '-t', help="task type", type= str, required=True)
 
 ## optional arguments
-parser.add_argument('--lr', '-lr', help="epoch n", type= float, default=0.0005)
-parser.add_argument('--epoch', '-e', help="epoch n", type= int, default=50)
-parser.add_argument('--batch', '-b', help="training batch size", type= int, default=128)
+parser.add_argument('--lr', help="lr", type= float, default=0.0005)
+parser.add_argument('--max_lr', help="maxlr", type= float, default=0.001)
+parser.add_argument('--clr', help="use onecyle learning or not", type= str2bool, default=True)
+parser.add_argument('--epoch',  help="epoch n", type= int, default=1000)
+parser.add_argument('--batch', help="training batch size", type= int, default=128)
 parser.add_argument('--seed', help="seed for random", type= int, default=1)
-parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
 parser.add_argument('--expname', help="name of the experiment (will be added to results path)", type= str, default=None)
 
-
+## others
+parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
+parser.add_argument('--lrfind', action='store_true', help="if true, run lr range test", default=False)
 ## required training parameter
 parser.add_argument('--time_steps', help="number of recurrent steps", type=int, required=True)
 parser.add_argument('--routings', help="num of dynamic routings", type= int, required=True)
@@ -97,6 +100,7 @@ if not os.path.isdir(args.output_dir):
 args.n_epochs= expargs.epoch
 args.batch_size= expargs.batch
 args.lr = expargs.lr
+args.max_lr = expargs.max_lr
 
 # seed for reproducibility
 args.rand_seed = expargs.seed
@@ -151,11 +155,10 @@ print(f'\nSTARTS TRAINING on task:{args.task}, device:{args.device}, expname: {C
 
 # set up model and optimizer
 model = RRCapsNet(args).to(args.device) 
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.7)
+
 
 ###########################
-# model print or train
+# model print or lrfind or train
 ##########################
 if expargs.print:
     print('\n==> print argument file')
@@ -166,6 +169,19 @@ if expargs.print:
     
     print('\n==> print model params')
     count_parameters(model)
+
+elif expargs.lrfind:
+    args.n_epochs = 10
+    args.batch_size = 128
+    args.lr = 0.000001
+    # load dataloader 
+    train_dataloader, _ = fetch_dataloader(args.task, args.data_dir, args.device, args.batch_size, train=True)
+
+    print('\n==> start lr range test begins')
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=2)
+    lr_range_test(model, train_dataloader, optimizer, scheduler, args, acc_name='top@1')
+
 else:
     # load dataloader 
     train_dataloader, val_dataloader = fetch_dataloader(args.task, args.data_dir, args.device, args.batch_size, train=True)
@@ -175,16 +191,43 @@ else:
                         comment = COMMENT, 
                         restore = args.restore_file is not None) 
     args.log_dir = current_log_path
+
+
+    # set lrs based on tasks
+#     if args.task =='mnist' or args.task=='mnist_recon':
+#         args.lr = 0.0005 
+#         args.max_lr = 0.001
+#     elif args.task =='mnist_shift':
+#         args.lr = 0.005
+#         args.max_lr = 0.01
+
+
+    # set optimizer and scheduler based on lr
+    args.clr= expargs.clr
+    if args.clr:
+        print('cycle lr scheduler is used')
+        print(f'lr cycles btw:{args.lr} , {args.max_lr}')
+
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr) 
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.max_lr, steps_per_epoch=len(train_dataloader), epochs=args.n_epochs)    
+    else:
+        print('decaying lr scheduler is used')
+        print(f'lr starts from: {args.max_lr}')
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.max_lr) 
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
+#         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.7)
+    
+    print('\n==> training begins')
     # save used param info to writer and logging directory for later retrieval
     writer.add_text('Params', pprint.pformat(args.__dict__))
     with open(os.path.join(args.log_dir, 'params.txt'), 'w') as f:
         pprint.pprint(args.__dict__, f, sort_dicts=False)
-
-    # start training
-    print('\n==> training begins')
+        
     train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_name='top@1')
-
+    
+    #save model and close writer
     writer.close()
+    print('\n==> training finished')
 
     
 

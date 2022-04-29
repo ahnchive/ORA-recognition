@@ -3,7 +3,6 @@
 # --------------------
 # code Refs:
 # modified from https://github.com/XifengGuo/CapsNet-Pytorch
-# modified from https://github.com/kamenbliznashki/generative_models/blob/master/draw.py
 
 import os
 import sys
@@ -957,7 +956,7 @@ def acc_fn(objcaps_len_step, y_true, acc_name, single_step=None):
 # Train and Test
 # --------------------
 
-def train_epoch(model, train_dataloader, optimizer, epoch, writer, args):
+def train_epoch(model, train_dataloader, optimizer, scheduler, epoch, writer, args):
     """
     for each batch:
         - forward pass  
@@ -1019,11 +1018,18 @@ def train_epoch(model, train_dataloader, optimizer, epoch, writer, args):
 
             # update param
             optimizer.step()
+            
+            # update schduler for cycle learning
+            if args.clr:
+                scheduler.step()
 
             # end of each batch, update tqdm tracking
             pbar.set_postfix(batch_loss='{:.3f}'.format(loss.item()))
             pbar.update()
     
+    # update scheduler
+    if not args.clr:
+        scheduler.step()
     return losses.avg
 
 def evaluate(model, x, y, args, acc_name, gtx=None):
@@ -1106,14 +1112,14 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
         print(f'Resuming training from epoch {start_epoch}')
     
     path_best = None
-    
+    epoch_no_improve = 0
+
     for epoch in range(start_epoch, args.n_epochs+1):
         
         # train epoch and lod to tensorboard writer
 
-        train_loss = train_epoch(model, train_dataloader, optimizer, epoch, writer, args)
+        train_loss = train_epoch(model, train_dataloader, optimizer, scheduler, epoch, writer, args)
         writer.add_scalar('Train/Loss', train_loss, epoch)
-        scheduler.step()
         
         # save checkpoint 
         if args.save_checkpoint:
@@ -1137,8 +1143,9 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
                 print(f"==> Epoch {epoch:d}: train_loss={train_loss:.5f}, val_loss={val_loss:.5f}, val_loss_class={val_loss_class:.5f}, val_loss_recon={val_loss_recon:.5f}, val_acc={val_acc:.4f}")
                
             # update best validation acc and save best model to output dir
-            if (val_acc > args.best_val_acc):
+            if (round(val_acc,4) > round(args.best_val_acc,4)):
                 args.best_val_acc = val_acc
+                epoch_no_improve = 0
                 # remove previous best
                 if path_best:
                     try:
@@ -1147,45 +1154,130 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
                         print("Error while deleting file ", path_best)
 
                 # save current best
-                path_best = args.log_dir +f'/best_model_epoch{epoch:d}_acc{val_acc:.4f}.pt'
+                path_best = args.log_dir +f'/best_epoch{epoch:d}_acc{val_acc:.4f}.pt'
                 torch.save(model.state_dict(), path_best)  
                 print(f"the model with best val_acc ({val_acc:.4f}) was saved to disk")
+            else:
+                epoch_no_improve += 1
                 
         # archive models        
         if (epoch%10==0):  
-            torch.save(model.state_dict(), args.log_dir +f'/archive_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')  #output_dir
+            torch.save(model.state_dict(), args.log_dir +f'/archive_epoch{epoch:d}_acc{val_acc:.4f}.pt')  #output_dir
             print(f"model archived at epoch ({epoch})")            
 
 
-        # abort the training if...
+        # abort training early if acc below criterior or exploding
         if (epoch%100 == 0) and (epoch < args.n_epochs):
             if hasattr(args, 'abort_if_valacc_below'):
                 if (args.best_val_acc < args.abort_if_valacc_below) or math.isnan(val_acc):
-                    
-                    # save aborted model as final
-                    torch.save(model.state_dict(), args.log_dir +f'/final_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')
+                    torch.save(model.state_dict(), args.log_dir +f'/aborted_epoch{epoch:d}_acc{val_acc:.4f}.pt')
                     status = f'===== EXPERIMENT ABORTED: val_acc is {val_acc} at epoch {epoch} (Criterion is {args.abort_if_valacc_below}) ===='
                     writer.add_text('Status', status, epoch)
                     print(status)
-                    sys.exit()
+#                     sys.exit()
+                    break
                 else:
                     status = '==== EXPERIMENT CONTINUE ===='
                     writer.add_text('Status', status, epoch)
                     print(status)
+                    
+        if epoch_no_improve >= 20:
+            torch.save(model.state_dict(), args.log_dir +f'/earlystop_{epoch:d}_acc{val_acc:.4f}.pt')
+            status = f'===== EXPERIMENT EARLY STOPPED (no progress on val_acc for last 20 epochs) ===='
+            writer.add_text('Status', status, epoch)
+            print(status)
+#             sys.exit()
+            break
+
+        if epoch == args.n_epochs:
+            torch.save(model.state_dict(), args.log_dir +f'/last_{epoch:d}_acc{val_acc:.4f}.pt')
+            status = f'===== EXPERIMENT RAN TO THE END EPOCH ===='
+            writer.add_text('Status', status, epoch)
+            print(status)
+            
+            
+            
+            
+
+
+def lr_range_test(model, train_dataloader,  optimizer, scheduler, args, acc_name):
+    """
+    for each epoch:
+    """
+    all_losses, all_lrs = [], []
+    for epoch in range(1, args.n_epochs+1):        
+        losses, lrs = train_epoch_lr(model, train_dataloader, optimizer, scheduler, epoch, args)
+        all_losses.extend(losses)
+        all_lrs.extend(lrs)
+    
+    # save results to save
+    import pandas as pd
+    df = pd.DataFrame()
+    df['loss'] = all_losses
+    df['lr'] = all_lrs
+    df.to_csv('lr_range_test.csv',index=False)
+    print('test results saved to disk')
+    
+
+def train_epoch_lr(model, train_dataloader, optimizer, scheduler, epoch, args):
+    """
+    for each batch:
+    """    
+    
+    model.train() 
+    with tqdm(total=len(train_dataloader), desc='epoch {} of {}'.format(epoch, args.n_epochs)) as pbar:
+#     time.sleep(0.1)        
         
+        # load batch from dataloader 
+        losses = []
+        lrs = []
+        for i, data in enumerate(train_dataloader):
+            
+            # load dataset on device
+#             x = x.view(x.shape[0], -1).to(args.device)
+            if len(data)==2:
+                x, y = data
+                x = x.to(args.device)
+                y = y.to(args.device)
+                gtx = None
+            elif len(data)==3:
+                x, gtx, y = data
+                x = x.to(args.device)
+                y = y.to(args.device)
+                gtx = gtx.to(args.device)
 
-        # save final model
-        if (epoch == args.n_epochs):
-            torch.save(model.state_dict(), args.log_dir +f'/final_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')
+            # forward pass
+            objcaps_len_step, x_recon_step = model(x)
+
+            # compute loss for this batch and append it to training loss
+            loss, _, _ = loss_fn(objcaps_len_step, y, x_recon_step, x, args, 
+                                 gtx=gtx, use_recon_loss = args.use_decoder) 
+            
+            if torch.isnan(torch.tensor([loss.item()])).any():
+                break
+            
+            
+            # minibatch update; zero out previous gradients and backward pass
+            optimizer.zero_grad()
+            loss.backward()
+
+            nn.utils.clip_grad_norm_(model.parameters(), 5)
+
+            # update param
+            lrs.append(scheduler.get_last_lr()[0])
+            losses.append(loss.item())
+            optimizer.step()
+            scheduler.step()
 
 
-            
-            
-            
-            
-            
-            
-            
+            # end of each batch, update tqdm tracking
+            pbar.set_postfix(batch_loss='{:.3f}'.format(loss.item()))
+            pbar.update()
+    
+    return losses, lrs
+                
+
+
             
             
             

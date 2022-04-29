@@ -165,7 +165,7 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
 
 
 
-def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None):
+def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None, only_plot_object=None):
     DEVICE =x.device 
     num_objcaps = args.num_classes + args.backg_objcaps
     
@@ -212,6 +212,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
     # plot each trial in the batch
     ###############################
     count = 0
+    
     for idx in range(start, start+n_image):
         if num_steps_to_finish:
             timesteps = num_steps_to_finish[idx]
@@ -234,6 +235,12 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             text_step.append(text)
         
         # plot conditional on...
+        if only_plot_object:
+            if gt==only_plot_object:
+                pass
+            else:
+                continue
+
         if type(plot_trials_when) == list:
             if idx in plot_trials_when:
                 pass
@@ -257,7 +264,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             else:
                 continue
         elif plot_trials_when == 'correct':
-            if correct_step[-1] and gt ==5: 
+            if correct_step[-1]:
                 pass
             else:
                 continue

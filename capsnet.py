@@ -624,7 +624,8 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
         - save best model
     """
     start_epoch = 1
-
+    epoch_no_improve=0
+    
     if args.restore_file:
         print(f'Restoring parameters from {args.restore_file}')
         start_epoch = load_checkpoint(args.restore_file, [model], [optimizer], map_location=args.device.type)
@@ -663,8 +664,9 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
                 print(f"==> Epoch {epoch:d}: train_loss={train_loss:.5f}, val_loss={val_loss:.5f}, val_loss_class={val_loss_class:.5f}, val_loss_recon={val_loss_recon:.5f}, val_acc={val_acc:.4f}")
                
             # update best validation acc and save best model to output dir
-            if (val_acc > args.best_val_acc):
+            if (round(val_acc,4) > round(args.best_val_acc,4)):
                 args.best_val_acc = val_acc
+                epoch_no_improve=0
                 # remove previous best
                 if path_best:
                     try:
@@ -673,39 +675,48 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
                         print("Error while deleting file ", path_best)
 
                 # save current best
-                path_best = args.log_dir +f'/best_model_epoch{epoch:d}_acc{val_acc:.4f}.pt'
+                path_best = args.log_dir +f'/best_epoch{epoch:d}_acc{val_acc:.4f}.pt'
                 torch.save(model.state_dict(), path_best)  
                 print(f"the model with best val_acc ({val_acc:.4f}) was saved to disk")
+            else:
+                epoch_no_improve+=1
                 
         # archive models        
         if (epoch%10==0):  
-            torch.save(model.state_dict(), args.log_dir +f'/archive_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')  #output_dir
+            torch.save(model.state_dict(), args.log_dir +f'/archive_epoch{epoch:d}_acc{val_acc:.4f}.pt')  #output_dir
             print(f"model archived at epoch ({epoch})")            
 
 
-        # abort the training if...
+        # abort training early if acc below criterior or exploding
         if (epoch%100 == 0) and (epoch < args.n_epochs):
             if hasattr(args, 'abort_if_valacc_below'):
                 if (args.best_val_acc < args.abort_if_valacc_below) or math.isnan(val_acc):
-                    
-                    # save aborted model as final
-                    torch.save(model.state_dict(), args.log_dir +f'/final_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')
+                    torch.save(model.state_dict(), args.log_dir +f'/aborted_epoch{epoch:d}_acc{val_acc:.4f}.pt')
                     status = f'===== EXPERIMENT ABORTED: val_acc is {val_acc} at epoch {epoch} (Criterion is {args.abort_if_valacc_below}) ===='
                     writer.add_text('Status', status, epoch)
                     print(status)
-                    sys.exit()
+#                     sys.exit()
+                    break
                 else:
                     status = '==== EXPERIMENT CONTINUE ===='
                     writer.add_text('Status', status, epoch)
                     print(status)
         
+        
+        if epoch_no_improve >= 20:
+            torch.save(model.state_dict(), args.log_dir +f'/earlystop_{epoch:d}_acc{val_acc:.4f}.pt')
+            status = f'===== EXPERIMENT EARLY STOPPED (no progress on val_acc for last 20 epochs) ===='
+            writer.add_text('Status', status, epoch)
+            print(status)
+#             sys.exit()
+            break
 
-        # save final model
-        if (epoch == args.n_epochs):
-            torch.save(model.state_dict(), args.log_dir +f'/final_model_epoch{epoch:d}_acc{val_acc:.4f}.pt')
 
-
-            
+        if epoch == args.n_epochs:
+            torch.save(model.state_dict(), args.log_dir +f'/last_{epoch:d}_acc{val_acc:.4f}.pt')
+            status = f'===== EXPERIMENT RAN TO THE END EPOCH ===='
+            writer.add_text('Status', status, epoch)
+            print(status)
             
             
             

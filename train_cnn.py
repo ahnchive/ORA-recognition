@@ -10,6 +10,8 @@ import os
 import random
 import numpy as np
 
+import sys
+import pprint
 from loaddata import *
 from utils import *
 
@@ -39,8 +41,10 @@ class Net(nn.Module):
         return output
 
 
-def train(args, model, device, train_loader, optimizer, epoch):
+def train(args, model, device, train_loader, optimizer, epoch, writer):
+    print(f'Epoch {epoch}:')
     model.train()
+    train_loss = 0
     for batch_idx, (data, target) in enumerate(train_loader):
         if len(target.size())>1:
             target = torch.argmax(target, dim=1) # change from one hot to integer index
@@ -51,6 +55,12 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
+        
+        train_loss += loss.item()
+    
+    train_loss /= len(train_loader.dataset)
+    writer.add_scalar('Train/Loss', train_loss, epoch)
+        
 #         if batch_idx % args.log_interval == 0:
 #             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
 #                 epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -59,7 +69,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
 #                 break
 
 
-def test(model, device, test_loader):
+def test(model, device, test_loader, epoch, writer):
     model.eval()
     test_loss = 0
     correct = 0
@@ -75,12 +85,15 @@ def test(model, device, test_loader):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
+    test_acc = correct / len(test_loader.dataset)
+    writer.add_scalar('Val/Loss', test_loss, epoch)
+    writer.add_scalar('Val/Loss', test_acc, epoch)
 
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.4f})'.format(
         test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
-    
-    return (100. * correct / len(test_loader.dataset))
+        test_acc))
+
+    return test_acc
 
 
 def main():
@@ -90,14 +103,14 @@ def main():
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=50, metavar='N',
-                        help='number of epochs to train (default: 14)')
+    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+                        help='number of epochs to train (default: 1000)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
     parser.add_argument('--gamma', type=float, default=0.7, metavar='M',
                         help='Learning rate step gamma (default: 0.7)')
-    parser.add_argument('--no-cuda', action='store_true', default=False,
-                        help='disables CUDA training')
+#     parser.add_argument('--no-cuda', action='store_true', default=False,
+#                         help='disables CUDA training')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='quickly check a single pass')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -105,19 +118,23 @@ def main():
 #     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=True,
                         help='For Saving the current Model')
-    
-    parser.add_argument('--exp-name', type=str, default='test')
+
+    parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
+    parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--expname', type=str, default='test')
     parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
         
     args = parser.parse_args()
     
-    args.output_dir = './results/mnist/'+ str(args.exp_name)
+    args.output_dir = './results/mnist/'
+    args.restore_file = None
+    COMMENT = args.expname
     
     
     if not os.path.isdir(args.output_dir):
         os.makedirs(args.output_dir)
     
-    use_cuda = not args.no_cuda and torch.cuda.is_available()
+#     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
 #     torch.manual_seed(args.seed)
 # seed for reproducibility
@@ -133,7 +150,11 @@ def main():
     
     seed_torch(args.seed)
     
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = torch.device('cuda:{}'.format(args.cuda) if torch.cuda.is_available() and args.cuda is not None else 'cpu')
+    model = Net().to(device)
+    
+    # load dataloader
+    train_loader, test_loader = fetch_dataloader(args.task, '../data', device, args.batch_size, train=True)
 
 #     train_kwargs = {'batch_size': args.batch_size}
 #     test_kwargs = {'batch_size': args.test_batch_size}
@@ -155,11 +176,20 @@ def main():
 #     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
 #     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-    train_loader, test_loader = fetch_dataloader('mnist', '../data', device, args.batch_size, train=True)
-
-    model = Net().to(device)
-    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
-
+    
+    # set writer for tensorboard
+    writer, current_log_path = set_writer(log_path = args.output_dir if args.restore_file is None else args.restore_file,
+                        comment = COMMENT, 
+                        restore = args.restore_file is not None) 
+    args.log_dir = current_log_path
+    
+    # save used param info to writer and logging directory for later retrieval
+    writer.add_text('Params', pprint.pformat(args.__dict__))
+    with open(os.path.join(args.log_dir, 'params.txt'), 'w') as f:
+        pprint.pprint(args.__dict__, f, sort_dicts=False)
+        
+    # set optimizer and scheduler
+    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)    
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     
     if args.print:
@@ -169,23 +199,43 @@ def main():
         print('\n==> print model params')
         count_parameters(model)
     else:
-        previous_acc=0.
+        best_acc=0.
         path_best=None
+        epoch_no_improve=0
         for epoch in range(1, args.epochs + 1):
-            train(args, model, device, train_loader, optimizer, epoch)
-            current_acc= test(model, device, test_loader)
+            train(args, model, device, train_loader, optimizer, epoch, writer)
+            current_acc= test(model, device, test_loader, epoch, writer)
             scheduler.step()
 
             if (epoch%10==0) & (args.save_model):
-                path_save = args.output_dir +f'/epoch{epoch}_{current_acc}.pt'
+                path_save = args.log_dir +f'/archive_epoch{epoch}_{current_acc:.4f}.pt'
                 torch.save(model.state_dict(), path_save)
 
-            if current_acc > previous_acc:
+            if round(current_acc,4) > round(best_acc,4):
+                best_acc= current_acc
+                epoch_no_improve=0
                 if path_best:
                     os.remove(path_best)
-                path_best =args.output_dir +f'/best_epoch{epoch}_{current_acc}.pt'
+                path_best =args.log_dir +f'/best_epoch{epoch}_{current_acc:.4f}.pt'
                 torch.save(model.state_dict(), path_best)
+            else:
+                epoch_no_improve+=1
             
-        
+            if epoch_no_improve >= 20:
+                path_save = args.log_dir +f'/earlystop_epoch{epoch}_{current_acc:.4f}.pt'
+                torch.save(model.state_dict(), path_save)
+                status = f'===== EXPERIMENT EARLY STOPPED (no progress on val_acc for last 20 epochs) ===='
+                writer.add_text('Status', status, epoch)
+                print(status)
+                break
+                
+            if epoch == args.epochs:
+                torch.save(model.state_dict(), args.log_dir +f'/last_{epoch:d}_acc{val_acc:.4f}.pt')
+                status = f'===== EXPERIMENT RAN TO THE END EPOCH ===='
+                writer.add_text('Status', status, epoch)
+                print(status)
+                
+        writer.close()
+                
 if __name__ == '__main__':
     main()

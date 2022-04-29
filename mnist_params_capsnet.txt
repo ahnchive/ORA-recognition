@@ -13,7 +13,7 @@
  # training setting
  ######################
  "n_epochs": 100,
- "lr": 0.0005,
+ "lr": 0.001,
  "batch_size": 128,
  "cuda": 0, # cuda device number
 
@@ -50,7 +50,7 @@
  ###############
  # loss function
  ###############
- "lam_recon": 0.5, # default is 0.5, the weight for reconstruction error
+ "lam_recon": 0.392, # default is 0.5, # the weight for reconstruction error, from original capsnet paper 0.0005*784=0.392
 
  "clip_recon": False, # whether clip reconstruction at range 0-1
 

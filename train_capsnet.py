@@ -36,8 +36,8 @@ parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
 parser.add_argument('--task', '-t', help="task type", type= str, required=True)
 
 ## optional arguments
-parser.add_argument('--epoch', '-e', help="epoch n", type= int, default=50)
-parser.add_argument('--batch', '-b', help="training batch size", type= int, default=128)
+parser.add_argument('--epoch', help="epoch n", type= int, default=1000)
+parser.add_argument('--batch', help="training batch size", type= int, default=128)
 parser.add_argument('--seed', help="seed for random", type= int, default=1)
 parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
 parser.add_argument('--expname', help="name of the experiment (will be added to results path)", type= str, default=None)
@@ -130,7 +130,8 @@ print(f'\nSTARTS TRAINING on task:{args.task}, device:{args.device}, expname: {C
 # set up model and optimizer
 model = CapsNet(args).to(args.device) 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.7)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.7)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.96)
 
 ###########################
 # model print or train
@@ -162,7 +163,9 @@ else:
     print('\n==> training begins')
     train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_name='top@1')
 
+    # close writer
     writer.close()
+    print('\n==> training finished')
 
     
 
