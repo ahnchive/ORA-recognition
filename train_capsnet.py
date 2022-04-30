@@ -53,7 +53,7 @@ expargs = parser.parse_args()
 # set hyperparams using param file 
 ############################################
 # load task param file
-if expargs.task == 'mnist':
+if expargs.task[:5] == 'mnist':
     params_filename = 'mnist_params_capsnet.txt'
 else:
     print(f"there is no task named {expargs.task} or task name should be given")
