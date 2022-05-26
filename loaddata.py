@@ -59,7 +59,7 @@ def prepare_train_val(train_dataset, test_dataset, batch_size, kwargs, validatio
     return train_dataloader, val_dataloader
         
     
-def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=True):
+def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=True, use_augmentation=False):
     """
     load dataset depending on the task
     currently implemented tasks:
@@ -78,7 +78,12 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
     ################
     if task == 'mnist': 
         print('original mnist dataset')
-        transforms = T.Compose([T.ToTensor()])
+        if use_augmentation:
+            print('with augmentation')
+            transforms = T.Compose([  T.RandomAffine(degrees=30, translate=(0.08, 0.08), scale=(0.7, 1.0), shear=30), T.ToTensor()])
+        else:
+            transforms = T.Compose([T.ToTensor()])
+
         dataset1 = datasets.MNIST(root=data_dir, train=True, download=download, transform=transforms,
                                 target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
         dataset2 = datasets.MNIST(root=data_dir, train=False, download=download, transform=transforms,
@@ -97,8 +102,23 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         
     elif task == 'mnist_recon': 
         data_root = '../data/MNIST_recon/'
-        train_datafile = 'train_blur_k5s1.pt'#'train_clean.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
-        test_datafile= 'test_blur_k5s1.pt' #'test_clean.pt'#'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
+        
+        # clean
+#         train_datafile= 'train_clean.pt'
+#         train_datafile= 'test_clean.pt'
+        
+        # blur
+        train_datafile = 'train_blur_k5s1.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
+        test_datafile= 'test_blur_k5s1.pt' #'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
+        
+        # recon edges
+#         train_datafile='train_canny_edge.pt'
+#         test_datafile='test_canny_edge.pt'
+        
+        # train edges 
+#         train_datafile='train_half_orig_half_edge.pt'
+#         test_datafile='test_half_orig_half_edge.pt'
+
         print(train_datafile, test_datafile)
 
         input_ims, gt_ims, ys = torch.load(data_root+train_datafile)
