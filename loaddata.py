@@ -100,24 +100,37 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         input_ims, ys = torch.load(data_root+test_datafile)
         dataset2 = TensorDataset(input_ims, ys)   
         
-    elif task == 'mnist_recon': 
+    elif task == 'mnist_recon' or task == 'mnist_recon_high' or task == 'mnist_recon_low': 
         data_root = '../data/MNIST_recon/'
         
-        # clean
-#         train_datafile= 'train_clean.pt'
-#         train_datafile= 'test_clean.pt'
+        if task == 'mnist_recon':
+            # clean, non filtered version
+            train_datafile= 'train_clean.pt'
+            test_datafile= 'test_clean.pt'
+
+#             # blur
+#             train_datafile = 'train_blur_k5s1.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
+#             test_datafile= 'test_blur_k5s1.pt' #'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
+
+#             # edges
+#             train_datafile='train_canny_edge.pt'
+#             test_datafile='test_canny_edge.pt'
+
+#             # train with edges 
+#             train_datafile='train_half_orig_half_edge.pt'
+#             test_datafile='test_half_orig_half_edge.pt'
+
+        elif task == 'mnist_recon_low':
+            # low pass version   
+            train_datafile= 'train_gaussian_lowpass.pt'
+            test_datafile= 'test_gaussian_lowpass.pt'
         
-        # blur
-        train_datafile = 'train_blur_k5s1.pt'#'train_recon_combine_x1.pt' #'train_recon_combine_x1_blot5bg.pt' 
-        test_datafile= 'test_blur_k5s1.pt' #'test_recon_combine_x1.pt' 'test_recon_combine_x1_blot5bg.pt' 
-        
-        # recon edges
-#         train_datafile='train_canny_edge.pt'
-#         test_datafile='test_canny_edge.pt'
-        
-        # train edges 
-#         train_datafile='train_half_orig_half_edge.pt'
-#         test_datafile='test_half_orig_half_edge.pt'
+
+        elif task == 'mnist_recon_high':
+            # high pass version   
+            train_datafile= 'train_gaussian_highpass.pt'
+            test_datafile= 'test_gaussian_highpass.pt'
+
 
         print(train_datafile, test_datafile)
 
