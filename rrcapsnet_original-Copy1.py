@@ -61,23 +61,15 @@ def scale_coef(x, dim=1, vrange=(0.0, 1.0), num_bgcapsule_to_exclude=0):
         # x narrow to include only objects
         x = x.narrow(dim=1,start=0, length=x.size(dim=1)-num_bgcapsule_to_exclude)
 
-    # softmax
-#     out = F.softmax(x, dim=dim)
-
-    # minmax scale
+    # scale value into range
     devmin = x - torch.min(x, dim=dim, keepdim=True)[0] 
     maxmin = torch.max(x, dim=dim, keepdim=True)[0] - torch.min(x, dim=dim, keepdim=True)[0]
     maxmin = torch.clip(maxmin, min=1e-6) # to avoid devision by zero
     out =  (vrange[1]- vrange[0])*devmin/maxmin +vrange[0]  
 
-    # get max value index
+#     # get max value index
 #     onehot = torch.zeros_like(x)
-#     _, idx = torch.max(x, dim=1)
-#     if len(x.shape)==3:
-#         mask = torch.arange(onehot.size(1)).reshape(1, -1, 1).to(x.device) == idx.unsqueeze(1)
-#     elif len(x.shape)==2:
-#         mask = torch.arange(onehot.size(1)).reshape(1, -1).to(x.device) == idx.unsqueeze(1)        
-#     onehot[mask] =1
+#     onehot[torch.arange(onehot.size(0)), x.argmax(dim=dim)] = 1.0
 #     out = onehot
 
 
@@ -105,11 +97,10 @@ def compute_rscore(x, recon, method='error'):
     if method == 'error':
         rerror = F.mse_loss(x, recon, reduction='none').view(batch_size,-1).sum(dim=1)
         rscore = torch.neg(rerror)
+#     elif method == 'multiply':
+#         rerror = (x*recon).view(batch_size,-1).sum(dim=1)
+#         rscore = torch.neg(rerror)
         
-    elif method == 'multiply':
-        rscore = (x*(recon>0.1)).view(batch_size,-1).sum(dim=1)
-        rscore = (x*recon).view(batch_size,-1).sum(dim=1)
-                
     elif method == 'explain-away':
         diff = recon - x
         diff[diff < 0] = 0 # ignore negative values, focus on the parts not explained yet 
@@ -850,18 +841,17 @@ class RRCapsNet(nn.Module):
                 
                 ###########################
                 # create weighted recon for mask
-                 ###########################
-#                 obj_rscore, obj_recon = get_every_obj_rscore(x_input, objcaps.detach(), self.decoder, save_recon=True)  #[n_batch, n_objects]
-# #                 obj_prob =  objcaps_len #[n_batch, n_objects]
-# #                 obj_prob =  F.softmax(objcaps_len, dim=1) #[n_batch, n_objects]
+                ###########################
+#                 obj_rscore, obj_recon = get_every_obj_rscore(x_input, objcaps.detach(), self.decoder, scale=False, save_recon=True)  #[n_batch, n_objects]
+#                 obj_prob =  objcaps_len #[n_batch, n_objects]
+#                 obj_prob =  F.softmax(objcaps_len, dim=1) #[n_batch, n_objects]
 #                 obj_prob =  F.softmax(obj_rscore, dim=1) #[n_batch, n_objects]
-# #                 obj_prob = scale_coef(objcaps_len, dim=1)
+#                 obj_prob = scale_coef(objcaps_len, dim=1)
     
-#                 topk = 10 #3
+#                 topk = 3
 #                 topkvalue = obj_prob.topk(topk, dim=1, sorted=True)[0][:,topk-1]
 #                 bool_index = obj_prob>=topkvalue.view(-1,1)
 #                 topk_obj_prob = bool_index*obj_prob
-                
 #                 x_recon_for_mask = (topk_obj_prob[:,:, None, None,None]*obj_recon).sum(dim=1)
 #                 x_recon_for_mask = (bool_index[:,:, None, None,None]*obj_recon).sum(dim=1)
 

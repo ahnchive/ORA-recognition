@@ -211,7 +211,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
     ##############################
     # plot each trial in the batch
     ###############################
-    count = 0
+    idx_plotted = []
     
     for idx in range(start, start+n_image):
         if num_steps_to_finish:
@@ -274,7 +274,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             else:
                 continue
         
-        count += 1
+        idx_plotted.append(idx)
         
         ############################
         # plot input vs recon at each stepwise
@@ -338,7 +338,8 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
                     print("self.rc===")
                     plot_coef(recon_coup_everyrouting[:,:,:40], objlen_before_everyrouting, objrscore_everyrouting[:,:,:40], objlen_everyrouting, num_classes = args.num_classes)
 
-    print(f'\n\n FINISED. There are {count} images plotted')
+    print(f'\n\n FINISED. There are {len(idx_plotted)} images plotted')
+    return idx_plotted
         
 
 # just list of imgs --> nrow*ncol
