@@ -1004,45 +1004,183 @@ def partialmatch(y_pred: torch.Tensor, y_true:  torch.Tensor, n_targets=2):
 
     return accs
 
-def acc_fn(objcaps_len_step, y_true, acc_name, single_step=None):
+
+def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
+    def get_first_zero_index(x, axis=1):
+        cond = (x == 0)
+        return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
+
+    pstep = objcaps_len_step_narrow.max(dim=-1)[1]
+
+    # check whether consecutive predictions are the same (diff=0)
+    pnow = pstep[:,1:]
+    pbefore = pstep[:,:-1]
+    pdiff = (pnow-pbefore)
+    null_column = -99*torch.ones(pdiff.size(0),1).to(pdiff.device) # add one null column at start
+    pdiff = torch.cat([null_column, pdiff], dim=1)
+    pdiff[:,-1]=0 # add diff= 0 to final step (to use final prediction if no criterion made)
+
+    # get first two consecutive (diff zero) index and model predictions
+    first_zero_index = get_first_zero_index(pdiff)
+    final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
+    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    nstep = (first_zero_index.flatten()+1).cpu().numpy()
+    if only_acc:
+        return accs
+    else:
+        return accs, final_pred, nstep
+
+
+
+def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=1.0, use_cumulative = True, only_acc= True):
+    from torch.distributions import Categorical
+
+    def get_first_true_index(boolarray, axis=1, when_no_true='final_index'):
+        # boolarray = Batch x Stepsize
+        first_true_index = ((boolarray.cumsum(axis) == 1) & boolarray).max(axis, keepdim=True)[1] # when no true, set as 0
+
+        if when_no_true == 'final_index': # when there is no true, use final index
+            final_index = boolarray.shape[1]-1
+            no_true_condition = (~boolarray).all(dim=1).reshape(-1,1)
+            first_true_index = first_true_index + final_index * no_true_condition
+            return  first_true_index, no_true_condition
+        else:
+            return first_true_index
+
+    if use_cumulative:
+        score = objcaps_len_step_narrow.cumsum(dim=1)
+        pred = score.max(dim=-1)[1]
+    else:
+        score = objcaps_len_step_narrow # Batch x Stepsize x Category
+        pred = score.max(dim=-1)[1] # Batch x Stepsize
+
+
+    # compute entropy from softmax output with Temp scale
+    T=0.2
+    softmax = F.softmax(score/T, dim=-1) # torch.Size([1000, 4, 10])
+    entropy = Categorical(probs = softmax).entropy() # torch.Size([1000, 4])
+
+    # entropy thresholding
+    stop = entropy<threshold
+    boolarray = (stop == True)
+
+    # get first index that reached threshold
+    first_true_index, no_stop_condition = get_first_true_index(boolarray, axis=1, when_no_true='final_index')
+
+    final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
+    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    nstep = (first_true_index.flatten()+1).cpu().numpy()
+
+    if only_acc:
+        return accs
+    else:
+        return accs, final_pred, nstep, no_stop_condition, entropy
+    
+def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy', single_step=None):
     '''
     1) topk accuracy: format should be top@k,
     2) 
     '''
-    num_classes = y_true.size(dim=1)
+    num_classes = y_true.size(dim=1) #onehot vector
     objcaps_len_step_narrow = objcaps_len_step.narrow(dim=-1,start=0, length=num_classes) # in case a background cap was added    
-    
-    if 'top' in acc_name:
-        # get final prediction
-        y_pred = objcaps_len_step_narrow[:,-1]
-        topk = int(acc_name.split('@')[1])
-        accs = topkacc(y_pred, y_true, topk=topk)
-        
-    elif acc_name =='dynamic':
+
+    if acc_type == 'entropy':
         if single_step:
-            # get final prediction
             y_pred = objcaps_len_step_narrow[:,-1]
             accs = topkacc(y_pred, y_true, topk=1)
         else:
-
-            def get_first_zero_index(x, axis=1):
-                cond = (x == 0)
-                return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
-
-            pstep = objcaps_len_step_narrow.max(dim=-1)[1]
-            pnow = pstep[:,1:]
-            pbefore = pstep[:,:-1]
-
-            pdiff = (pnow-pbefore)
-            null_column = -99*torch.ones(pdiff.size(0),1).to(pdiff.device)
-            pdiff = torch.cat([null_column, pdiff], dim=1) # first step as null
-            pdiff[:,-1]=0 # final step as zero
-            nstep = get_first_zero_index(pdiff)
-            y_pred= torch.gather(pstep, 1, nstep).flatten()
-            accs = torch.eq(y_pred, y_true.max(dim=1)[1]).float()
+            accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
+    elif acc_type == 'hypothesis':
+        if single_step:
+            y_pred = objcaps_len_step_narrow[:,-1]
+            accs = topkacc(y_pred, y_true, topk=1)
+        else:
+            accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
+            
+    elif 'top' in acc_type:
+        # get final prediction
+        y_pred = objcaps_len_step_narrow[:,-1]
+        topk = int(acc_type.split('@')[1])
+        accs = topkacc(y_pred, y_true, topk=topk)
         
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
+
+#     if 'top' in acc_type:
+#         # get final prediction
+#         y_pred = objcaps_len_step_narrow[:,-1]
+#         topk = int(acc_type.split('@')[1])
+#         accs = topkacc(y_pred, y_true, topk=topk)
+        
+#     elif acc_type =='hypothesis':
+#         # hypothesis testing 2 consecutive --> correct
+#         if single_step:
+#             # get final prediction
+#             y_pred = objcaps_len_step_narrow[:,-1]
+#             accs = topkacc(y_pred, y_true, topk=1)
+#         else:
+
+#             def get_first_zero_index(x, axis=1):
+#                 cond = (x == 0)
+#                 return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
+
+#             pstep = objcaps_len_step_narrow.max(dim=-1)[1]
+#             pnow = pstep[:,1:]
+#             pbefore = pstep[:,:-1]
+
+#             pdiff = (pnow-pbefore)
+#             null_column = -99*torch.ones(pdiff.size(0),1).to(pdiff.device)
+#             pdiff = torch.cat([null_column, pdiff], dim=1) # first step as null
+#             pdiff[:,-1]=0 # final step as zero
+#             nstep = get_first_zero_index(pdiff)
+#             y_pred= torch.gather(pstep, 1, nstep).flatten()
+#             accs = torch.eq(y_pred, y_true.max(dim=1)[1]).float()
+        
+#     elif acc_type == 'entropy'
+#         from torch.distributions import Categorical
+
+#         def get_first_true_index(boolarray, axis=1, when_no_true='final_index'):
+#             # boolarray = Batch x Stepsize
+#             first_true_index = ((boolarray.cumsum(axis) == 1) & boolarray).max(axis, keepdim=True)[1] # when no true, set as 0
+
+#             if when_no_true == 'final_index': # when there is no true, use final index
+#                 final_index = boolarray.shape[1]-1
+#                 no_true_condition = (~boolarray).all(dim=1).reshape(-1,1)
+#                 first_true_index = first_true_index + final_index * no_true_condition
+#                 return  first_true_index, no_true_condition
+#             else:
+#                 return first_true_index
+
+#         if use_cumulative:
+#             score = objcaps_len_step_narrow.cumsum(dim=1)
+#             pred = score.max(dim=-1)[1]
+#         else:
+#             score = objcaps_len_step_narrow # Batch x Stepsize x Category
+#             pred = score.max(dim=-1)[1] # Batch x Stepsize
+
+
+#         # compute entropy from softmax output with Temp scale
+#         T=0.2
+#         softmax = F.softmax(score/T, dim=-1) # torch.Size([1000, 4, 10])
+#         entropy = Categorical(probs = softmax).entropy() # torch.Size([1000, 4])
+
+#         # entropy thresholding
+#         stop = entropy<threshold
+#         boolarray = (stop == True)
+
+#         # get first index that reached threshold
+#         first_true_index, no_stop_condition = get_first_true_index(boolarray, axis=1, when_no_true='final_index')
+
+#         final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
+#         accs = torch.eq(final_pred.cpu(), y_hot.max(dim=1)[1])
+#         nstep = (first_true_index.flatten()+1).cpu().numpy()
+
+#         return nstep, final_pred, acc, no_stop_condition
+
+#     nstep, pred_model, acc_model_check, no_stop_condition = get_nstep(objcaps_len_step_narrow, y_hot, threshold=1.0, use_cumulative = False)
+    
+#     else:
+#         raise NotImplementedError('given acc functions are not implemented yet')
         
     return accs
 
@@ -1127,7 +1265,7 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, epoch, writer, ar
         scheduler.step()
     return losses.avg
 
-def evaluate(model, x, y, args, acc_name, gtx=None):
+def evaluate(model, x, y, args, acc_type, gtx=None):
     """
     Run model prediction on testing dataset and compute loss/acc 
     """
@@ -1151,14 +1289,14 @@ def evaluate(model, x, y, args, acc_name, gtx=None):
         # compute batch loss and accuracy
         loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)
         if args.time_steps==1:
-            acc = acc_fn(objcaps_len_step, y, acc_name, single_step=True)
+            acc = acc_fn(objcaps_len_step, y, acc_type, single_step=True)
         else:
-            acc = acc_fn(objcaps_len_step, y, acc_name)
+            acc = acc_fn(objcaps_len_step, y, acc_type)
 
     return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step
 
 
-def test(model, dataloader, args, acc_name):
+def test(model, dataloader, args, acc_type):
     """
     for each batch:
         - evaluate loss & acc ('evaluate')
@@ -1167,7 +1305,7 @@ def test(model, dataloader, args, acc_name):
     losses = AverageMeter('Loss', ':.4e')
     losses_class = AverageMeter('Loss_class', ':.4e')
     losses_recon = AverageMeter('Loss_recon', ':.4e')
-    accs_topk = AverageMeter(acc_name, ':6.2f')
+    accs_topk = AverageMeter(acc_type, ':6.2f')
     
     # load batch data
     for data in dataloader:
@@ -1179,7 +1317,7 @@ def test(model, dataloader, args, acc_name):
             
         # evaluate
         batch_losses, batch_acc, objcaps_len_step, x_recon_step, \
-        =  evaluate(model, x, y, args, acc_name, gtx)
+        =  evaluate(model, x, y, args, acc_type, gtx)
             
         # aggregate loss and acc
         losses.update(batch_losses[0].item(), x.size(0))
@@ -1190,7 +1328,7 @@ def test(model, dataloader, args, acc_name):
     return losses.avg, losses_class.avg, losses_recon.avg, accs_topk.avg
 
 
-def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_name):
+def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_type):
     """
     for each epoch:
         - train the model, update param, and log the training loss ('train_epoch')
@@ -1226,7 +1364,7 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
 
         # compute validation loss and acc
         if (epoch) % args.validate_after_howmany_epochs == 0:
-            val_loss, val_loss_class, val_loss_recon, val_acc = test(model, val_dataloader, args, acc_name)
+            val_loss, val_loss_class, val_loss_recon, val_acc = test(model, val_dataloader, args, acc_type)
             
             # logging validation info to tensorboard writer
             writer.add_scalar('Val/Loss', val_loss, epoch)
@@ -1295,7 +1433,7 @@ def train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, sched
             
 
 
-def lr_range_test(model, train_dataloader,  optimizer, scheduler, args, acc_name):
+def lr_range_test(model, train_dataloader,  optimizer, scheduler, args, acc_type):
     """
     for each epoch:
     """

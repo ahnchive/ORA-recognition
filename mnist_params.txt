@@ -12,7 +12,7 @@
  ####################
 
  # Encoder for feature extraction
- "encoder_type": 'resnet', #'two-conv-layer', 'capsnet'
+ "encoder_type": 'resnet', #'resnet', #'two-conv-layer', 'capsnet'
  "enc_projection_type": None, # 'linear', None, 'rnn'
  
  # Capsule Network 

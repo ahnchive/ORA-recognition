@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from rrcapsnet_original import get_every_obj_rscore, scale_coef
 
-def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=20, **imshow_kwargs):
+def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=15, **imshow_kwargs):
     # row title, col title both should be vectors 
     
     if not isinstance(imgarray, np.ndarray):
@@ -32,7 +32,7 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
 
     if row_text is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, num_cols-1].text(w+1, h, row_text[row_idx], fontsize=fontsize, color='black')
+            axs[row_idx, num_cols-1].text(w+10, h-5, row_text[row_idx], fontsize=fontsize, color='black')
             
     plt.tight_layout()
     plt.show()
@@ -165,7 +165,7 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
 
 
 
-def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None, only_plot_object=None):
+def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None, entropy=None):
     DEVICE =x.device 
     num_objcaps = args.num_classes + args.backg_objcaps
     
@@ -231,15 +231,11 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             ps = max_obj_step[t]
             correct = gt==ps
             correct_step.append(correct)
-            text = f'**CORRECT**: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred:{ps}' if correct else f'INCORRECT: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred:{ps}'
+            ent = round(entropy[idx][t].cpu().item(),2)
+            text = f'**CORRECT**: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}' if correct else f'INCORRECT: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}'
             text_step.append(text)
         
         # plot conditional on...
-        if only_plot_object:
-            if gt==only_plot_object:
-                pass
-            else:
-                continue
 
         if type(plot_trials_when) == list:
             if idx in plot_trials_when:
@@ -289,6 +285,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
         imgarray = np.stack((x_origs, x_masks, x_inputs,x_recons), axis=1) #timesteps x 4 x channel x height x width array
         
 
+        
         plt.rcParams["figure.figsize"] = (10,2*timesteps)
         row_title = [f'step{i+1}' for i in range(timesteps)]
         col_title = ['original', 'attn mask', 'masked input', 'recon']    
