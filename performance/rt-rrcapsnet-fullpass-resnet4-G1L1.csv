@@ -1,0 +1,17 @@
+corruption,./results/mnist/Aug14_1023_fs_res4_run1/best_epoch32_acc1.0000.pt,./results/mnist/Aug14_1039_fs_res4_run2/best_epoch32_acc1.0000.pt,./results/mnist/Aug14_1051_fs_res4_run3/best_epoch27_acc1.0000.pt,./results/mnist/Aug14_1102_fs_res4_run4/best_epoch32_acc1.0000.pt,./results/mnist/Aug14_1114_fs_res4_run5/best_epoch25_acc1.0000.pt
+identity,1.0,1.0,1.0,1.0,1.0
+shot_noise,1.0,1.0,1.0,1.0,1.0
+impulse_noise,1.0,1.0,1.0,1.0,1.0
+glass_blur,1.0,1.0,1.0,1.0,1.0
+motion_blur,1.0,1.0,1.0,1.0,1.0
+shear,1.0,1.0,1.0,1.0,1.0
+scale,1.0,1.0,1.0,1.0,1.0
+rotate,1.0,1.0,1.0,1.0,1.0
+brightness,1.0,1.0,1.0,1.0,1.0
+translate,1.0,1.0,1.0,1.0,1.0
+stripe,1.0,1.0,1.0,1.0,1.0
+fog,1.0,1.0,1.0,1.0,1.0
+spatter,1.0,1.0,1.0,1.0,1.0
+dotted_line,1.0,1.0,1.0,1.0,1.0
+zigzag,1.0,1.0,1.0,1.0,1.0
+canny_edges,1.0,1.0,1.0,1.0,1.0
