@@ -1,0 +1,151 @@
+
+######
+# eval_performance_rrcapsnet.ipynb
+#######
+
+# './models/rrcapsnet/run1_epoch50_acc0.9917.pt',
+# './models/rrcapsnet/run2_epoch50_acc0.9915.pt',
+# './models/rrcapsnet/run3_epoch50_acc0.9907.pt',
+# './models/rrcapsnet/run4_epoch50_acc0.9905.pt',
+# './models/rrcapsnet/run5_epoch50_acc0.9907.pt',
+
+# './results/mnist/Apr28_1352_adam_clr_128/archive_model_epoch50_acc0.9987.pt'
+# './results/mnist/Apr28_1408_adam_clr_512/archive_model_epoch50_acc0.9953.pt' # increase bn worse
+# './results/mnist/Apr28_1438_adam_clr_128_wde5/archive_model_epoch50_acc0.9986.pt'
+# './results/mnist/Apr28_1458_adam_clr_128_wde4/archive_model_epoch50_acc0.9963.pt' #incerase weigthday worse
+# './results/mnist/Apr28_1550_adamw_clr_128/archive_model_epoch50_acc0.9988.pt'
+# './results/mnist/Apr28_1626_rmsprop_clr_128/archive_model_epoch50_acc0.9936.pt'
+# './results/mnist/Apr28_1641_adam_exp_128/archive_model_epoch50_acc0.9979.pt'
+# './results/mnist/Apr28_1719_adam_exp_128_lre3/archive_model_epoch50_acc0.9982.pt'
+# './results/mnist/Apr28_1745_adam_exp_128_lre3_lamrecon5/archive_model_epoch50_acc0.9986.pt'
+# './results/mnist/Apr28_1815_capsnetencoder_cycle/archive_model_epoch220_acc0.9961.pt'
+
+# './results/mnist/Apr28_2001_shift_adamclr/archive_model_epoch50_acc0.9860.pt'
+
+# Clean-CLR
+# './results/mnist/Apr29_0212_clean_clr_run1/best_epoch174_acc0.9993.pt',
+# './results/mnist/Apr29_0321_clean_clr_run2/best_epoch163_acc0.9993.pt',
+# './results/mnist/Apr29_0427_clean_clr_run3/best_epoch186_acc0.9994.pt',
+# './results/mnist/Apr29_0540_clean_clr_run4/best_epoch212_acc0.9995.pt',
+# './results/mnist/Apr29_0703_clean_clr_run5/earlystop_245_acc0.9995.pt',
+
+    
+# Clean-WD 0.0005, 0.98
+# './results/mnist/Apr29_1353_clean_wd2_run1/best_epoch85_acc0.9983.pt',
+# './results/mnist/Apr29_1435_clean_wd2_run2/best_epoch95_acc0.9986.pt',
+# './results/mnist/Apr29_1704_clean_wd2_run3/best_epoch105_acc0.9988.pt',
+# './results/mnist/Apr29_1749_clean_wd2_run4/best_epoch92_acc0.9983.pt',
+# './results/mnist/Apr29_1829_clean_wd2_run5/best_epoch115_acc0.9987.pt',
+    
+
+    
+# Shift-WD
+# './results/mnist/Apr30_0304_shift_run1/best_epoch103_acc0.9966.pt',
+# './results/mnist/Apr30_0400_shift_run2/best_epoch78_acc0.9977.pt',
+# './results/mnist/Apr30_0425_shift_run3/best_epoch85_acc0.9973.pt',
+# './results/mnist/Apr30_0450_shift_run4/best_epoch80_acc0.9958.pt',
+# './results/mnist/Apr30_0513_shift_run5/best_epoch64_acc0.9978.pt'
+
+    
+# Clean-Aug-WD
+# './results/mnist/May25_0235_clean_aug_run1/best_epoch84_acc0.9662.pt',
+# './results/mnist/May25_0323_clean_aug_run2/best_epoch83_acc0.9714.pt',
+# './results/mnist/May25_0411_clean_aug_run3/best_epoch99_acc0.9713.pt',
+# './results/mnist/May25_0506_clean_aug_run4/best_epoch81_acc0.9664.pt',
+# './results/mnist/May25_0554_clean_aug_run5/best_epoch75_acc0.9713.pt'
+
+    
+    
+# Clean-WD
+# './results/mnist/Apr29_0213_clean_wd_run1/best_epoch75_acc0.9981.pt',
+# './results/mnist/Apr29_0247_clean_wd_run2/best_epoch81_acc0.9987.pt',
+# './results/mnist/Apr29_0322_clean_wd_run3/best_epoch88_acc0.9987.pt',
+# './results/mnist/Apr29_0400_clean_wd_run4/best_epoch62_acc0.9980.pt',
+# './results/mnist/Apr29_0429_clean_wd_run5/best_epoch71_acc0.9987.pt',
+    
+# Recon-blur-WD
+# './results/mnist/Apr30_0144_recon_run1/best_epoch81_acc0.9983.pt',
+# './results/mnist/Apr30_0208_recon_run2/best_epoch73_acc0.9986.pt',
+# './results/mnist/Apr30_0230_recon_run3/best_epoch77_acc0.9986.pt',
+# './results/mnist/Apr30_0253_recon_run4/best_epoch63_acc0.9981.pt',
+# './results/mnist/Apr30_0321_recon_run5/best_epoch77_acc0.9987.pt',
+    
+# resnet-blur version
+# './results/mnist/May29_0416_blur_res_run1/best_epoch21_acc1.0000.pt',
+# './results/mnist/May29_0427_blur_res_run2/best_epoch30_acc1.0000.pt',
+# './results/mnist/May29_0440_blur_res_run3/best_epoch37_acc1.0000.pt',
+# './results/mnist/May29_0455_blur_res_run4/best_epoch36_acc1.0000.pt',
+# './results/mnist/May29_0510_blur_res_run5/best_epoch29_acc1.0000.pt'
+
+# resnet 4 layers -blur
+# './results/mnist/May29_2045_blur_res4_run1/best_epoch32_acc1.0000.pt',
+# './results/mnist/May29_2056_blur_res4_run2/best_epoch32_acc1.0000.pt',
+# './results/mnist/May29_2109_blur_res4_run3/best_epoch32_acc1.0000.pt',
+# './results/mnist/May29_2121_blur_res4_run4/best_epoch30_acc1.0000.pt',
+# './results/mnist/May29_2132_blur_res4_run5/best_epoch30_acc1.0000.pt'
+
+
+######
+# eval_visualization_rrcapsnet.ipynb
+#######
+
+-- evaluate on batch ---
+# original rrcapsnet (mnist_recon, trainvalsplit)
+# './models/rrcapsnet/run1_epoch50_acc0.9917.pt',
+# './models/rrcapsnet/run2_epoch50_acc0.9915.pt',
+# './models/rrcapsnet/run3_epoch50_acc0.9907.pt',
+# './models/rrcapsnet/run4_epoch50_acc0.9905.pt',
+# './models/rrcapsnet/run5_epoch50_acc0.9907.pt',
+
+# './results/mnist/Apr28_1815_capsnetencoder_cycle/archive_model_epoch220_acc0.9961.pt'
+# './results/mnist/Apr28_1815_capsnetencoder_cycle/archive_model_epoch390_acc0.9992.pt'
+# './results/mnist/Apr28_2001_shift_adamclr/archive_model_epoch50_acc0.9860.pt'
+# './results/mnist/Apr28_2055_shift_adamclr_epoch1000/best_model_epoch147_acc0.9885.pt'
+# './results/mnist/Apr28_2131_shift_adamclr_epoch1000_difflrrange/archive_model_epoch80_acc0.9979.pt'
+# './results/mnist/Apr29_0120_test/archive_epoch50_acc0.9975.pt'
+
+# clean-wd
+# './results/mnist/Apr29_0213_clean_wd_run1/best_epoch75_acc0.9981.pt',
+
+# best our
+# './models/rrcapsnet/rrcapsnet_best.pt'
+    
+# clean-aug
+# './results/mnist/May25_0411_clean_aug_run3/best_epoch99_acc0.9713.pt'
+    
+# recon edge
+# './results/mnist/May25_2049_recon_edge_run1/best_epoch68_acc0.9980.pt'
+# './results/mnist/May25_2111_recon_edge_run2/best_epoch66_acc0.9986.pt'
+# './results/mnist/May25_2156_train_edge_run1/archive_epoch70_acc0.9955.pt'    
+# './results/mnist/May25_2219_train_edge_run2/best_epoch39_acc0.9970.pt'
+# './results/mnist/May25_2131_recon_edge_run3/best_epoch70_acc0.9987.pt'
+# blur-resnet
+# './results/mnist/May26_0133_test/best_epoch51_acc0.9999.pt'
+# './results/mnist/May27_0156_test2/best_epoch33_acc0.9999.pt'
+# './results/mnist/May28_2148_test3/best_epoch19_acc1.0000.pt'
+# './results/mnist/May28_2152_test-same/best_epoch17_acc1.0000.pt'
+# './results/mnist/May29_0142_test4/best_epoch21_acc1.0000.pt'
+# './results/mnist/May29_0220_test5-32/best_epoch26_acc1.0000.pt'
+# './results/mnist/May29_0210_test5/best_epoch23_acc1.0000.pt'
+# './results/mnist/May29_1445_test4-32/best_epoch29_acc1.0000.pt'
+# './results/mnist/May29_1525_test6/best_epoch32_acc1.0000.pt'
+# './results/mnist/May29_1543_test6-64/best_epoch38_acc1.0000.pt'
+# './results/mnist/May29_2031_test7/best_epoch29_acc1.0000.pt'
+
+# './results/mnist/May29_2045_blur_res4_run1/best_epoch32_acc1.0000.pt',
+
+
+--- visualize----
+# load_model_path = './results/mnist/May25_2049_recon_edge_run1/best_epoch68_acc0.9980.pt'
+# load_model_path= './results/mnist/May25_2131_recon_edge_run3/best_epoch70_acc0.9987.pt'
+# load_model_path = './results/mnist/May29_2045_blur_res4_run1/best_epoch32_acc1.0000.pt'
+
+
+
+######
+# eval_stepwise_rrcapsnet.ipynb
+#######
+    
+load_model_path = './results/mnist/May25_2049_recon_edge_run1/best_epoch68_acc0.9980.pt'
+load_model_path= './results/mnist/May25_2131_recon_edge_run3/best_epoch70_acc0.9987.pt'
+load_model_path = './results/mnist/May29_2045_blur_res4_run1/best_epoch32_acc1.0000.pt'
