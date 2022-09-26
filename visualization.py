@@ -19,7 +19,7 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
         for col_idx in range(num_cols):
             img = imgarray[row_idx,col_idx]
             ax = axs[row_idx, col_idx]
-            ax.imshow(np.asarray(img), cmap='gray', vmin=0, vmax=1, **imshow_kwargs)
+            ax.imshow(np.asarray(img), cmap='gray_r', vmin=0, vmax=1, **imshow_kwargs)
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
             
     if col_title is not None:
@@ -38,17 +38,25 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
     plt.show()
     
 def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
+    
     import seaborn as sns
     
-    nrow = len(coef) # routing steps    
-    nobj = coef[-1].shape[0] # number of objects (classes + bkg)
-    nprimary = coef[-1].shape[1] # number of primary caps
-    fig, axs = plt.subplots(nrow, 4, figsize=(20,4*nrow), gridspec_kw={'width_ratios': [8, 1, 1, 1]})
+    nrow = 3 #len(coef) # routing steps    
+    nobj = 10 #coef[-1].shape[0] # number of objects (classes + bkg)
+    nprimary = 40 #coef[-1].shape[1] # number of primary caps
+    
+    coef = coef[:nrow, :nobj, :nprimary]
+    objrscore = objrscore[:nrow, :nobj, :nprimary]    
+    objlen_before = objlen_before[:nrow, :nobj]
+    objlen = objlen[:nrow, :nobj]
+
+    
+    fig, axs = plt.subplots(nrow, 4, figsize=(20,4*nrow), gridspec_kw={'width_ratios': [8, 1, 1, 1]}) #12, 2.2
 
     if nobj > num_classes:
         objlabels = [i for i in range(num_classes)]+ ['BG' for i in range(nobj-num_classes)]
     else:
-        objlabels = [i for i in range(num_classes)]
+        objlabels = [i for i in range(nobj)]
                 
     for n in range(nrow):
         # coefficient array heatmap
@@ -68,9 +76,9 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
 
 
 #         axs[n,0].set_title(f'routing {n+1}', color='blue')
-        axs[n,0].set_ylabel(f'object caps @ routing {n+1}', fontsize=15)
+        axs[n,0].set_ylabel(f'Object caps', fontsize=15)
         axs[n,0].set_yticklabels(objlabels) 
-        axs[n,0].set_xlabel('primary caps')
+        axs[n,0].set_xlabel('Feature caps', fontsize=15)
         axs[n,0].set_xticklabels([i for i in range(1,nprimary+1)])
         
 
@@ -82,8 +90,8 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
         axs[n,1].barh(ylabels,  objlen_before[n].round(2),  height=1.0, facecolor='grey', edgecolor='black')
         axs[n,1].set_yticklabels(objlabels) 
         axs[n,1].invert_yaxis()
-        axs[n,1].set_ylabel('object')
-        axs[n,1].set_xlabel('Raw Class Likelihood') # capsule length before rscore applied, i.e., simple dynamic routing
+        axs[n,1].set_ylabel('Object')
+        axs[n,1].set_xlabel('Raw\nClass Likelihood') # capsule length before rscore applied, i.e., simple dynamic routing
         axs[n,1].set_yticks(ylabels)
         axs[n,1].set_xticks([0, 0.5, 1.0])
         axs[n,1].set_xlim(0, 1.0)
@@ -96,7 +104,7 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
         axs[n,2].set_yticklabels(objlabels) 
         axs[n,2].invert_yaxis()
         axs[n,2].set_ylabel('object')
-        axs[n,2].set_xlabel('Reconstruction Score')
+        axs[n,2].set_xlabel('Reconstruction\nScore')
         axs[n,2].set_yticks(ylabels)
 #         axs[n,2].set_xticks([0, 0.5, 1.0])
 #         axs[n,2].set_xlim(0, 1.0)
@@ -109,7 +117,7 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
         axs[n,3].set_yticklabels(objlabels) 
         axs[n,3].invert_yaxis()
         axs[n,3].set_ylabel('object')
-        axs[n,3].set_xlabel('Adjusted Class Likelihood') # capsule length after rscore applied
+        axs[n,3].set_xlabel('Adjusted\nClass Likelihood') # capsule length after rscore applied
         axs[n,3].set_yticks(ylabels)
         axs[n,3].set_xticks([0, 0.5, 1.0])
         axs[n,3].set_xlim(0, 1.0)
@@ -120,10 +128,10 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
 
 
     plt.tick_params(axis='both', labelsize=12)
-    fig.suptitle('coupling coeffs', x=0.1)
+#     fig.suptitle('coupling coeffs', x=0.1)
     plt.tight_layout()
-    plt.show()
-        # plt.savefig('final.png', dpi=120)
+    plt.savefig('binding_illustration.pdf', bbox_inches='tight', dpi=300)
+    plt.show()    
     
 def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, fontsize=15, **imshow_kwargs):
     from matplotlib.patches import Rectangle
@@ -322,7 +330,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
         ##################################
         if plot_routings:
             if args.routings>1:
-                for t in range(timesteps):
+                for t in range(timesteps): #timesteps
                     print('coupling coeff at time step: ', t+1)
                     coup_everyrouting = outputs['coups'][idx][t].cpu().numpy()
                     beta_everyrouting = outputs['betas'][idx][t].cpu().numpy()
@@ -333,7 +341,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
                     objlen_before_everyrouting = outputs['outcaps_len_before'][idx][t].cpu().numpy()
 
                     print("self.rc===")
-                    plot_coef(recon_coup_everyrouting[:,:,:40], objlen_before_everyrouting, objrscore_everyrouting[:,:,:40], objlen_everyrouting, num_classes = args.num_classes)
+                    plot_coef(recon_coup_everyrouting, objlen_before_everyrouting, objrscore_everyrouting, objlen_everyrouting, num_classes = args.num_classes) # recon_coup_everyrouting[:,:,:40], objrscore_everyrouting[:,:,:40]
 
     print(f'\n\n FINISED. There are {len(idx_plotted)} images plotted')
     return idx_plotted

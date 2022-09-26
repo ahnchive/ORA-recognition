@@ -149,11 +149,11 @@ class ResNet(nn.Module):
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.flatten = nn.Flatten()         
 
-#         self.fc = nn.Linear(256, outputs)
+        self.fc = nn.Linear(256, outputs)
         
-        self.fc1 = nn.Linear(256, 128)
-        self.fc2 = nn.Linear(128, outputs)
-        self.dropout2 = nn.Dropout(0.5)
+#         self.fc1 = nn.Linear(256, 128)
+#         self.fc2 = nn.Linear(128, outputs)
+#         self.dropout2 = nn.Dropout(0.5)
 
     def forward(self, input):
         input = self.layer0(input)
@@ -164,10 +164,10 @@ class ResNet(nn.Module):
         input = self.gap(input)
         input = self.flatten(input)
         
-#         input = self.fc(input)
-        input = self.fc1(input)
-        input = self.dropout2(input)
-        input = self.fc2(input)
+        input = self.fc(input)
+#         input = self.fc1(input)
+#         input = self.dropout2(input)
+#         input = self.fc2(input)
 
         input = F.log_softmax(input, dim=1)
 
