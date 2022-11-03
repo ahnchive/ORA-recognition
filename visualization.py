@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn.functional as F
-from rrcapsnet_original import get_every_obj_rscore, scale_coef
+from ourmodel import get_every_obj_rscore, scale_coef
 
 def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=15, **imshow_kwargs):
     # row title, col title both should be vectors 
