@@ -8,7 +8,7 @@ import torch
 from utils import *
 from loaddata import *
 
-from rrcapsnet_original import * 
+from ourmodel import * 
 # from rrcapsnet_writeglimpse import * 
 
 import warnings
@@ -222,7 +222,7 @@ else:
         pprint.pprint(args.__dict__, f, sort_dicts=False)
         
     print('\n==> training begins')
-    train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_name='top@1')
+    train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_type='top@1')
     
     #save model and close writer
     writer.close()

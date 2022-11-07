@@ -9,9 +9,11 @@
 
 # declare -a expnames=("test" "blur_res_run1" "blur_res_run2" "blur_res_run3" "blur_res_run4" "blur_res_run5")
 # declare -a expnames=("test" "blur_res4_run1" "blur_res4_run2" "blur_res4_run3" "blur_res4_run4" "blur_res4_run5")
-declare -a expnames=("test" "fs_res4_run1" "fs_res4_run2" "fs_res4_run3" "fs_res4_run4" "fs_res4_run5")
+# declare -a expnames=("test" "fs_res4_run1" "fs_res4_run2" "fs_res4_run3" "fs_res4_run4" "fs_res4_run5")
 
-for rseed in 1 2 3 4 5; do
-# for rseed in 5; do
-    python train_rrcapsnet.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}
+declare -a expnames=("test")
+
+# for rseed in 1 2 3 4 5; do
+for rseed in 0; do
+    python train_our.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}
 done
