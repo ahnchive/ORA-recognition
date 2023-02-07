@@ -300,6 +300,14 @@ class ResBlock(nn.Module):
         return nn.ReLU()(input)
     
 class ResNetEncoder(nn.Module):
+    '''
+    Resnet-18 like architecture for MNIST task
+    - the code is modified from: https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
+    - downsample in layer0 was removed because MNIST image is already small
+    - kernel size, stride, padding was also reduced to make enough features left for creating slot representation
+    - # of filters also reduced to (32, 64, 128, 256) as it gives no significant MNIST performance difference from the original (64, 128, 256, 512)
+    - batchnorm doesn't change the MNIST performance; no batch normalization was used
+    '''
     def __init__(self, in_channels, resblock, dim_caps, num_caps):
         super().__init__()
         self.layer0 = nn.Sequential(
