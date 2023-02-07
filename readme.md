@@ -6,10 +6,13 @@ Many visual phenomena suggest that humans use top-down generative or reconstruct
 
 To cite this work:
 ```
-@inproceedings{ahn2022reconstruction,
-  title={Reconstruction-guided attention improves the robustness and shape processing of neural networks},
-  author={Ahn, Seoyoung and Adeli, Hossein and Zelinsky, Greg},
-  booktitle={SVRHM 2022 Workshop@ NeurIPS}
+@inproceedings{
+ahn2022reconstructionguided,
+title={Reconstruction-guided attention improves the robustness and shape processing of neural networks},
+author={Seoyoung Ahn and Hossein Adeli and Greg Zelinsky},
+booktitle={SVRHM 2022 Workshop @ NeurIPS },
+year={2022},
+url={https://openreview.net/forum?id=tmvg0VIHTDr}
 }
 ```
 
@@ -18,4 +21,5 @@ To cite this work:
 
 
 # For model evaluation and visualizations
-Please copy and place the ipython notebook from `notebook` in the current folder. 
+- Please copy and place the ipython notebook from `notebook` in the current folder. 
+- You can load pretrained models from `models`
