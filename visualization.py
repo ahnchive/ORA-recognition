@@ -229,7 +229,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             
         # get gt and pred label info 
         gt = y[idx].argmax(dim=0).cpu().item()
-        baseline = pred_to_compare[idx].item()
+        baseline = pred_to_compare[idx].item() if pred_to_compare is not None else None
         max_obj_step = list(max_act_obj[idx].cpu().detach().numpy()) # (3,)
         correct_step =[]
         text_step = []

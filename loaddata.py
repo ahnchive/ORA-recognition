@@ -148,6 +148,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
         
+        
     elif task == 'mnist_occlusion': 
         if train:
             raise NotImplementedError
@@ -174,6 +175,25 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
+        
+    elif task == 'mnist_c_exp1': 
+        if train:
+            raise NotImplementedError
+        else:
+            test_input_ims, test_ys = torch.load('../data/MNIST_C/mnistc_exp1.pt')
+            test_dataset = TensorDataset(test_input_ims, test_ys)
+            test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
+            return test_dataloader
+        
+    elif task == 'mnist_c_exp2': 
+        if train:
+            raise NotImplementedError
+        else:
+            test_input_ims, test_ys = torch.load('../data/MNIST_C/mnistc_exp2.pt')
+            test_dataset = TensorDataset(test_input_ims, test_ys)
+            test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
+            return test_dataloader
+        
         
     #################
     # load data loader
