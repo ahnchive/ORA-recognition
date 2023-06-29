@@ -310,8 +310,8 @@ def main():
     seed_torch(args.seed)
     
     device = torch.device('cuda:{}'.format(args.cuda) if torch.cuda.is_available() and args.cuda is not None else 'cpu')
-#     model = Net().to(device)
-    model = ResNet(in_channels=1, resblock= ResBlock, outputs=10).to(device)
+    model = Net().to(device)
+#     model = ResNet(in_channels=1, resblock= ResBlock, outputs=10).to(device)
     # load dataloader
     train_loader, test_loader = fetch_dataloader(args.task, '../data', device, args.batch_size, train=True)
 
