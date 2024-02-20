@@ -364,7 +364,7 @@ class Encoder(nn.Module):
         Outputs:
         - primary caps  [batch, num_caps, dim_caps] 
     """
-    def __init__(self, encoder_type, projection_type, img_channels, dim_caps):
+    def __init__(self, encoder_type, encoder_feature_shape, projection_type, img_channels, dim_caps):
         super().__init__()
         self.encoder_type= encoder_type # use pretrained feature extractor
         self.projection_type = projection_type
@@ -372,7 +372,7 @@ class Encoder(nn.Module):
         
         # define encoder type
         if self.encoder_type == 'two-conv-layer':
-            self.enc_feature_shape =  (8*8, 12, 12) #(4*8, 11, 11)
+            self.enc_feature_shape =  encoder_feature_shape # (8*8, 12, 12) #(4*8, 11, 11)
             enc_feature_size = self.enc_feature_shape[0]*self.enc_feature_shape[1]*self.enc_feature_shape[2]
             num_caps = int(enc_feature_size/self.dim_caps) #(11*11)*4
                         
@@ -388,16 +388,16 @@ class Encoder(nn.Module):
             ]))
 
         elif self.encoder_type == 'resnet':
-            self.enc_feature_shape =  (32*8,3,3)# (64*8,6,6)# (64*8,3, 3) # (32*8,7, 7)# (32*8,6, 6)#(8*8, 12, 12) #(16*8, 8, 8) 
+            self.enc_feature_shape = encoder_feature_shape # (64*8,6,6)# (64*8,3, 3) # (32*8,7, 7)# (32*8,6, 6)#(8*8, 12, 12) #(16*8, 8, 8) 
             enc_feature_size = self.enc_feature_shape[0]*self.enc_feature_shape[1]*self.enc_feature_shape[2]
-            num_caps = int(enc_feature_size/self.dim_caps) #(6*6)*256/8
+            num_caps = int(enc_feature_size/self.dim_caps) #(3*3)*256/8
             self.enc = ResNetEncoder(in_channels=1, resblock= ResBlock, dim_caps=self.dim_caps, num_caps=num_caps)
             
             
         elif self.encoder_type == 'capsnet':
-            self.enc_feature_shape = (32*8, 6, 6)
+            self.enc_feature_shape = encoder_feature_shape
             enc_feature_size = self.enc_feature_shape[0]*self.enc_feature_shape[1]*self.enc_feature_shape[2]
-            num_caps = int(enc_feature_size/self.dim_caps) #(6*6)*256/8
+            num_caps = int(enc_feature_size/self.dim_caps) #(3*3)*256/8
             
             self.enc = nn.Sequential(OrderedDict([
                 ('conv1', nn.Conv2d(in_channels=img_channels, out_channels=256, kernel_size=9, stride=1, padding=0)),
@@ -694,6 +694,7 @@ class RRCapsNet(nn.Module):
         # encoder (given image --> pricaps)
         print(f'ENCODER: {args.encoder_type} w/ {args.enc_projection_type} projection')
         self.encoder = Encoder(encoder_type= args.encoder_type,
+                               encoder_feature_shape= args.encoder_feature_shape,
                                projection_type = args.enc_projection_type,
                                img_channels= self.C,
                                dim_caps = args.dim_pricaps,

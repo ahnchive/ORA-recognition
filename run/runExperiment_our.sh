@@ -15,5 +15,5 @@ declare -a expnames=("test")
 
 # for rseed in 1 2 3 4 5; do
 for rseed in 0; do
-    python train_our.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}
+    python train_our.py --cuda 0 --task mnist_recon --param_file 'mnist_params_our.txt' --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}
 done

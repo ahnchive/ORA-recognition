@@ -34,9 +34,21 @@ Following packages are required, full list in `requirements.txt`. Tested with py
 
 
 # Training the model
-` python train_our.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}`
-` python train_our.py --cuda 0 --task mnist_recon_ --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}`
+` python train_our.py --cuda 0 --task mnist_recon --param_file 'mnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname test`
 
+
+if expargs.task[0:5] == 'mnist':
+    params_filename = 'mnist_params.txt'
+if expargs.task[0:5] == 'mnist_multi':
+    params_filename = 'mnist_params.txt'
+elif expargs.task == 'cifar10':
+    params_filename = 'cifar10_params.txt'
+else:
+    print(f"there is no task named {expargs.task} or task name should be given")
+
+You have to adjust the feature size of resnet according to your input size
+36 --> (32*8,4,4)
+28 --> (32*8,3,3)
 # For model evaluation and visualizations
 - Please copy and place the ipython notebook from `notebook` in the current folder. 
 - You can load pretrained models from `models`, `run1.pt` is our best (on average)

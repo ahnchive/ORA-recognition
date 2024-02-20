@@ -34,12 +34,13 @@ import random
 #         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
     
 
+DATA_DIR = './data'
 def prepare_train_val(train_dataset, test_dataset, batch_size, kwargs, validation_by):
     print('validation by ', validation_by)
     
     if validation_by == 'mnistc-mini':
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False, **kwargs)
-        val_input_ims, val_ys = torch.load('../data/MNIST_C/mnistc_mini.pt')
+        val_input_ims, val_ys = torch.load(f'{DATA_DIR}/MNIST_C/mnistc_mini.pt')
         val_dataset = TensorDataset(val_input_ims, val_ys)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, **kwargs)
         
@@ -90,7 +91,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
                                 target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
 
     elif task == 'mnist_shift': 
-        data_root = '../data/multimnist/'
+        data_root = f'{DATA_DIR}/multimnist/'
         train_datafile = 'mnist_overlap4pix_nodup_1fold_36width_1obj_train.pt' # train_shift_by_2pixel.pt' 
         test_datafile= 'mnist_overlap4pix_nodup_1fold_36width_1obj_test.pt' #test_shift_by_2pixel.pt' 
         print(train_datafile, test_datafile)
@@ -101,7 +102,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         dataset2 = TensorDataset(input_ims, ys)   
         
     elif task == 'mnist_recon' or task == 'mnist_recon_high' or task == 'mnist_recon_low': 
-        data_root = '../data/MNIST_recon/'
+        data_root = f'{DATA_DIR}/MNIST_recon/'
         
         if task == 'mnist_recon':
             # clean, non filtered version
@@ -143,7 +144,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_C/mnistc_mini.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_C/mnistc_mini.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
@@ -153,7 +154,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_shape/test_occlusion.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_shape/test_occlusion.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
@@ -162,7 +163,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_shape/test_flipped.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_shape/test_flipped.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
@@ -171,7 +172,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_shape/test_random.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_shape/test_random.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
@@ -180,7 +181,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_C/mnistc_exp1.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_C/mnistc_exp1.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader
@@ -189,7 +190,7 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
         if train:
             raise NotImplementedError
         else:
-            test_input_ims, test_ys = torch.load('../data/MNIST_C/mnistc_exp2.pt')
+            test_input_ims, test_ys = torch.load(f'{DATA_DIR}/MNIST_C/mnistc_exp2.pt')
             test_dataset = TensorDataset(test_input_ims, test_ys)
             test_dataloader = DataLoader(test_dataset, batch_size=batch_size, **kwargs)
             return test_dataloader

@@ -35,6 +35,7 @@ parser = argparse.ArgumentParser()
 ## required arguments
 parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
 parser.add_argument('--task', '-t', help="task type", type= str, required=True)
+parser.add_argument('--param_file', help="model hyper parameters", type= str, required=True)
 
 ## optional arguments
 parser.add_argument('--lr', help="lr", type= float, default=0.001) #0.0005
@@ -63,13 +64,7 @@ expargs = parser.parse_args()
 # set hyperparams using param file 
 ############################################
 # load the default param setting for the current task
-if expargs.task[0:5] == 'mnist':
-    params_filename = 'mnist_params.txt'
-elif expargs.task == 'cifar10':
-    params_filename = 'cifar10_params.txt'
-else:
-    print(f"there is no task named {expargs.task} or task name should be given")
-
+params_filename = expargs.param_file
 args = parse_params(params_filename)
 args.task = expargs.task
 
