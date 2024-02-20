@@ -1,0 +1,3 @@
+
+python train_our.py --cuda 0 --task mnist_shift --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_shift
+python train_cnn.py --cuda 0 --task mnist_shift --seed 1 --expname cnn_mnist_shift

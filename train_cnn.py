@@ -175,14 +175,14 @@ class ResNet(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, feature_size_after_conv, num_classes=10):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
+        self.fc1 = nn.Linear(feature_size_after_conv, 128) 
+        self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -192,6 +192,7 @@ class Net(nn.Module):
         x = F.max_pool2d(x, 2)
         x = self.dropout1(x)
         x = torch.flatten(x, 1)
+        # print(x.size())
         x = self.fc1(x)
         x = F.relu(x)
         x = self.dropout2(x)
@@ -258,21 +259,23 @@ def test(model, device, test_loader, epoch, writer):
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+    parser.add_argument('--model-type', type=str, default='2conv', 
+                        help='model type to use (default: 2conv)')
+    parser.add_argument('--batch-size', type=int, default=64, 
                         help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=1000, 
                         help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+    parser.add_argument('--epochs', type=int, default=1000,
                         help='number of epochs to train (default: 1000)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
                         help='learning rate (default: 1.0)')
-    parser.add_argument('--gamma', type=float, default=0.7, metavar='M',
+    parser.add_argument('--gamma', type=float, default=0.7,
                         help='Learning rate step gamma (default: 0.7)')
 #     parser.add_argument('--no-cuda', action='store_true', default=False,
 #                         help='disables CUDA training')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='quickly check a single pass')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
+    parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
 #     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=True,
@@ -286,6 +289,7 @@ def main():
     args = parser.parse_args()
     
     args.output_dir = './results/mnist/'
+    args.data_dir = './data/'
     args.restore_file = None
     COMMENT = args.expname
     
@@ -310,10 +314,17 @@ def main():
     seed_torch(args.seed)
     
     device = torch.device('cuda:{}'.format(args.cuda) if torch.cuda.is_available() and args.cuda is not None else 'cpu')
-    model = Net().to(device)
-#     model = ResNet(in_channels=1, resblock= ResBlock, outputs=10).to(device)
+
+    # load model
+    if args.model_type == 'resnet':
+        model = ResNet(in_channels=1, resblock= ResBlock, outputs=10).to(device)
+    elif args.model_type == '2conv':
+        model = Net(feature_size_after_conv=9216, num_classes=10).to(device) # fc1 size # when, orig img size 28, 28 (9216, 128), when 36, 36 (16384, 128)
+    else:
+        raise NotImplementedError('model type not supported')
+    
     # load dataloader
-    train_loader, test_loader = fetch_dataloader(args.task, '../data', device, args.batch_size, train=True)
+    train_loader, test_loader = fetch_dataloader(args.task, args.data_dir, device, args.batch_size, train=True)
 
 #     train_kwargs = {'batch_size': args.batch_size}
 #     test_kwargs = {'batch_size': args.test_batch_size}
