@@ -90,9 +90,9 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
                                 target_transform=T.Lambda(lambda y: torch.zeros(10, dtype=torch.float).scatter_(0, torch.tensor(y), value=1)))
 
     elif task == 'mnist_shift': 
-        data_root = '../data/MNIST_shift/'
-        train_datafile = 'train_shift_by_2pixel.pt'
-        test_datafile= 'test_shift_by_2pixel.pt' 
+        data_root = '../data/multimnist/'
+        train_datafile = 'mnist_overlap4pix_nodup_1fold_36width_1obj_train.pt' # train_shift_by_2pixel.pt' 
+        test_datafile= 'mnist_overlap4pix_nodup_1fold_36width_1obj_test.pt' #test_shift_by_2pixel.pt' 
         print(train_datafile, test_datafile)
 
         input_ims, ys = torch.load(data_root+train_datafile)

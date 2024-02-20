@@ -29,13 +29,17 @@ Following packages are required, full list in `requirements.txt`. Tested with py
 - prettytable
 
 
-# Command for training models
+# Replicating our experiments
 `bash run/runExperiment_our.sh`
 
 
+# Training the model
+` python train_our.py --cuda 0 --task mnist_recon --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}`
+` python train_our.py --cuda 0 --task mnist_recon_ --seed $rseed --time_step 1 --routings 1 --expname ${expnames[$rseed]}`
+
 # For model evaluation and visualizations
 - Please copy and place the ipython notebook from `notebook` in the current folder. 
-- You can load pretrained models from `models`
+- You can load pretrained models from `models`, `run1.pt` is our best (on average)
 
 # Resources
 Origianl capsnet implementation is from https://github.com/XifengGuo/CapsNet-Pytorch
