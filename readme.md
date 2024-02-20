@@ -16,6 +16,19 @@ url={https://openreview.net/forum?id=tmvg0VIHTDr}
 }
 ```
 
+# set environment
+Following packages are required, full list in `requirements.txt`. Tested with python =3.8 and pytorch =1.7
+- python == 3.8 
+- pytorch == 1.7 
+- torchvision==0.8.2
+- ipykernel ==6.29
+- pandas == 2.0.3
+- matplotlib = 3.7.5
+- tensorboardX==2.6
+- tqdm
+- prettytable
+
+
 # Command for training models
 `bash run/runExperiment_our.sh`
 
@@ -23,3 +36,6 @@ url={https://openreview.net/forum?id=tmvg0VIHTDr}
 # For model evaluation and visualizations
 - Please copy and place the ipython notebook from `notebook` in the current folder. 
 - You can load pretrained models from `models`
+
+# Resources
+Origianl capsnet implementation is from https://github.com/XifengGuo/CapsNet-Pytorch
