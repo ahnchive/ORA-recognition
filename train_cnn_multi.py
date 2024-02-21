@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
+# from torchmetrics.classification import MultilabelAccuracy
+
 import os
 import random
 import numpy as np
@@ -169,7 +171,7 @@ class ResNet(nn.Module):
 #         input = self.dropout2(input)
 #         input = self.fc2(input)
 
-        input = F.log_softmax(input, dim=1)
+        # input = F.log_softmax(input, dim=1) #<--- since you use BCEWithLogitsLoss
 
         return input
 
@@ -197,7 +199,7 @@ class Net(nn.Module):
         x = F.relu(x)
         x = self.dropout2(x)
         x = self.fc2(x)
-        # output = F.log_softmax(x, dim=1)
+        # output = F.log_softmax(x, dim=1) #<--- since you use BCEWithLogitsLoss
         output = x 
 
         return output
@@ -243,9 +245,15 @@ def test(model, device, test_loader, epoch, writer):
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += F.binary_cross_entropy_with_logits(output, target, reduction='sum').item()  # sum up batch loss
+            
+            output = torch.sigmoid(output)     #<--- since you use BCEWithLogitsLoss
+            predicted = torch.round(output)
+            
+            correct += torch.all(torch.eq(predicted, target), dim=1).sum().item()
+            # correct += (predicted == target).all().sum().item()
             # pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             # correct += pred.eq(target.view_as(pred)).sum().item()
-            
+
 
     test_loss /= len(test_loader.dataset)
     test_acc = correct / len(test_loader.dataset)
@@ -260,10 +268,21 @@ def test(model, device, test_loader, epoch, writer):
 
 
 def main():
-    # Training settings
+
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+    parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
+    parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--expname', type=str, default='test')
+
+    parser.add_argument('--output-dir', type=str, default='./results/mnist/')
+    parser.add_argument('--data-dir', type=str, default= './data/')
+    parser.add_argument('--restore-file', type=str, default=None, 
+                        help='path to latest checkpotint')
+
     parser.add_argument('--model-type', type=str, default='2conv', 
                         help='model type to use (default: 2conv)')
+    parser.add_argument('--num_classes', type=int, default=10, 
+                        help='number of classes (default: 10)')
     parser.add_argument('--batch-size', type=int, default=64, 
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, 
@@ -274,29 +293,21 @@ def main():
                         help='learning rate (default: 1.0)')
     parser.add_argument('--gamma', type=float, default=0.7,
                         help='Learning rate step gamma (default: 0.7)')
-#     parser.add_argument('--no-cuda', action='store_true', default=False,
-#                         help='disables CUDA training')
-    parser.add_argument('--dry-run', action='store_true', default=False,
-                        help='quickly check a single pass')
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
+#     parser.add_argument('--no-cuda', action='store_true', default=False,
+#                         help='disables CUDA training')
+    parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='quickly check a single pass')
+
 #     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=True,
                         help='For Saving the current Model')
-
-    parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
-    parser.add_argument('--task', type=str, required=True)
-    parser.add_argument('--expname', type=str, default='test')
-    parser.add_argument('--print', action='store_true', help="if true, just print model info, false continue training", default=False)
         
     args = parser.parse_args()
     
-    args.output_dir = './results/mnist/'
-    args.data_dir = './data/'
-    args.restore_file = None
-    COMMENT = args.expname
-    
-    
+    # create output directory if not exists    
     if not os.path.isdir(args.output_dir):
         os.makedirs(args.output_dir)
     
@@ -320,9 +331,9 @@ def main():
 
     # load model
     if args.model_type == 'resnet':
-        model = ResNet(in_channels=1, resblock= ResBlock, outputs=10).to(device)
+        model = ResNet(in_channels=1, resblock= ResBlock, outputs=args.num_classes).to(device)
     elif args.model_type == '2conv':
-        model = Net(feature_size_after_conv=9216, num_classes=10).to(device) # fc1 size # when, orig img size 28, 28 (9216, 128), when 36, 36 (16384, 128)
+        model = Net(feature_size_after_conv=16384, num_classes=args.num_classes).to(device) # fc1 size # when, orig img size 28, 28 (9216, 128), when 36, 36 (16384, 128)
     else:
         raise NotImplementedError('model type not supported')
     
@@ -352,7 +363,7 @@ def main():
     
     # set writer for tensorboard
     writer, current_log_path = set_writer(log_path = args.output_dir if args.restore_file is None else args.restore_file,
-                        comment = COMMENT, 
+                        comment = args.expname, 
                         restore = args.restore_file is not None) 
     args.log_dir = current_log_path
     
@@ -365,6 +376,9 @@ def main():
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)    
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     
+    # acc function
+    # micro_acc_fn = MultilabelAccuracy(num_labels=args.num_classes, average='micro')
+    # macro_acc_fn = MultilabelAccuracy(num_labels=args.num_classes, average='macro')
     if args.print:
         print('\n==> print model architecture')
         print(model)
