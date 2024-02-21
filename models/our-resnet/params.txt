@@ -2,6 +2,7 @@
  'num_targets': 1,
  'image_dims': (1, 28, 28),
  'encoder_type': 'resnet',
+ 'encoder_feature_shape': (256,3,3), 
  'enc_projection_type': None,
  'dim_pricaps': 8,
  'dim_objcaps': 16,

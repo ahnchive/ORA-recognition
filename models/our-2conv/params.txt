@@ -1,6 +1,7 @@
 {'num_classes': 10,
  'num_targets': 1,
  'image_dims': (1, 28, 28),
+ 'encoder_feature_shape':(64, 12, 12),
  'encoder_type': 'two-conv-layer',
  'enc_projection_type': None,
  'dim_pricaps': 8,
