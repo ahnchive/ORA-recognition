@@ -178,7 +178,7 @@ elif expargs.lrfind:
     print('\n==> start lr range test begins')
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=2)
-    lr_range_test(model, train_dataloader, optimizer, scheduler, args, acc_name=f'top@{args.num_targets}')
+    lr_range_test(model, train_dataloader, optimizer, scheduler, args, acc_name='top@1')
 
 else:
     # load dataloader 
@@ -217,7 +217,7 @@ else:
         pprint.pprint(args.__dict__, f, sort_dicts=False)
         
     print('\n==> training begins')
-    train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_type=f'top@{args.num_targets}')
+    train_and_evaluate(model, train_dataloader, val_dataloader, optimizer, scheduler, writer, args, acc_type='top@1')
     
     #save model and close writer
     writer.close()

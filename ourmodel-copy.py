@@ -833,20 +833,13 @@ class RRCapsNet(nn.Module):
                     else:
                         x_recon_bkg = torch.zeros(x.shape, device=device)
 
-                    # get most likely obj(s) recon based on self.num_targets
+                    # get most likely obj recon
                     objcaps_len_narrow = objcaps_len.narrow(dim=1,start=0, length=self.num_classes)
-                    
-                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=self.num_targets, dim=-1)                    
-                    y_khot = torch.zeros(objcaps_len.size(), device= objcaps_len.device)
-                    for i in range(self.num_targets): # Scatter 1's to the top-2 indices.
-                        y_khot.scatter_(1, topk_indices[:, i].view(-1, 1), 1.)
-
-                    # idx_max_obj = objcaps_len_narrow.max(dim=1)[1] # same when topk= 1
+                    idx_max_obj = objcaps_len_narrow.max(dim=1)[1]
                     # idx_max_obj = obj_rscore.max(dim=1)[1]
-                    # y_onehot = torch.zeros(objcaps_len.size(), device= objcaps_len.device).scatter_(1, idx_max_obj.view(-1,1), 1.)
-
-                    objcaps_khot = (objcaps * y_khot[:, :, None])
-                    x_recon_obj, h_dec = self.decoder(objcaps_khot, h_dec) # h_dec is only used when decoder use rnn projection
+                    y_onehot = torch.zeros(objcaps_len.size(), device= objcaps_len.device).scatter_(1, idx_max_obj.view(-1,1), 1.)
+                    objcaps_onehot = (objcaps * y_onehot[:, :, None])
+                    x_recon_obj, h_dec = self.decoder(objcaps_onehot, h_dec) # h_dec is only used when decoder use rnn projection
 
                     # get final recon
                     x_recon = x_recon_obj + x_recon_bkg
@@ -975,9 +968,8 @@ def loss_fn(objcaps_len_step, y_true, x_recon_step, x, args, gtx=None, use_recon
 
 def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1):
     """
-    how many of topk predictions are accurate --> 1 (all topk are in labels), 0.5 (half topk are in lables), 0 (none)
-    e.g., one of top2 is in gt label = 0.5    
-
+    if one of the top2 predictions are accurate --> 1, none--> 0
+    
     Input: 
         - y_pred should be a vector of prediction score 
         - y_true should be in multi-hot encoding format (one or zero; can't deal with duplicates)
@@ -987,7 +979,7 @@ def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1):
     with torch.no_grad():
         topk_indices = y_pred.topk(topk, sorted=True)[1] 
         accs = torch.gather(y_true, dim=1, index=topk_indices).sum(dim=1)
-        accs = (accs/topk)
+
     return accs
 
 def exactmatch(y_pred: torch.Tensor, y_true: torch.Tensor):
