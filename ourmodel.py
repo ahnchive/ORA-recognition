@@ -991,8 +991,10 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
     # get first two consecutive (diff zero) index and model predictions
     first_zero_index = get_first_zero_index(pdiff)
     final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
+    
     accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
     nstep = (first_zero_index.flatten()+1) #.cpu().numpy()
+    
     if only_acc:
         return accs
     else:
@@ -1044,34 +1046,36 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
     else:
         return accs, final_pred, nstep, no_stop_condition, entropy
     
-def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy', single_step=None):
+def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1', single_step=None):
     '''
-    1) entropy
-    2) hypothesis
-    3) topk accuracy: format should be top@k,
+    1) entropy@k: acc measured at the step following confidence/uncertainty framework (entropy below certain threshold), topk acc used when single step 
+    2) hypothesis@k: acc measured at the step following hypothesis testing framework (two consecutive same predictions), topk acc used when single step 
+    3) topk accuracy@k: just topk acc measured at the final step
+    format should be acctype@k,
     '''
     num_classes = y_true.size(dim=1) #onehot vector
+    
     objcaps_len_step_narrow = objcaps_len_step.narrow(dim=-1,start=0, length=num_classes) # in case a background cap was added    
+    num_steps = objcaps_len_step_narrow.size(dim=1)
 
-    if acc_type == 'entropy':
-        if single_step:
-            y_pred = objcaps_len_step_narrow[:,-1]
-            accs = topkacc(y_pred, y_true, topk=1)
-        else:
-            accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
-    elif acc_type == 'hypothesis':
-        if single_step:
-            y_pred = objcaps_len_step_narrow[:,-1]
-            accs = topkacc(y_pred, y_true, topk=1)
-        else:
-            accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
-            
-    elif 'top' in acc_type:
-        # get final prediction
-        y_pred = objcaps_len_step_narrow[:,-1]
+    if '@' in acc_type:
         topk = int(acc_type.split('@')[1])
+    else:
+        topk = 1
+
+    if ('top' in acc_type) or num_steps == 1:
+        y_pred = objcaps_len_step_narrow[:,-1] # use the final step
         accs = topkacc(y_pred, y_true, topk=topk)
-        
+        return accs
+
+    if 'entropy' in acc_type:
+        assert num_steps > 1, 'entropy based is used when time steps > 1'
+        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
+    
+    elif 'hypothesis' in acc_type:
+        assert num_steps > 1, 'hypothesis based is used when time steps > 1'
+        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
+
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
         
