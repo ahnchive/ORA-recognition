@@ -10,4 +10,4 @@ python train_cnn_multi.py --cuda 0 --task mnist_multi_high --num-objects 2 --mod
 
 ## our
 python train_our.py --cuda 0 --task mnist_multi --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_multi
-python train_our.py --cuda 0 --task mnist_multi --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_multi_high
+python train_our.py --cuda 0 --task mnist_multi_high --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_multi_high
