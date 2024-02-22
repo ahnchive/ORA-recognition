@@ -1,3 +1,13 @@
 # mnist shift 4, a single digit
 python train_our.py --cuda 0 --task mnist_shift --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_shift
 python train_cnn.py --cuda 0 --task mnist_shift --seed 1 --expname cnn_mnist_shift
+
+# mnist overlapping digits
+## cnn
+python train_cnn_multi.py --cuda 0 --task mnist_multi --seed 1 --num-objects 2 --expname cnn_mnist_multi #2conv
+python train_cnn_multi.py --cuda 0 --task mnist_multi --seed 1 --model-type 'resnet' --expname resnet_mnist_multi 
+python train_cnn_multi.py --cuda 0 --task mnist_multi_high --num-objects 2 --model-type 'resnet' --seed 1 --expname resnet_mnist_multi_high 
+
+## our
+python train_our.py --cuda 0 --task mnist_multi --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_multi
+python train_our.py --cuda 0 --task mnist_multi --param_file 'multimnist_params_our.txt' --seed 1 --time_step 1 --routings 1 --expname mnist_multi_high

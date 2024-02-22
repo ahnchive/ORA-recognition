@@ -91,8 +91,8 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
 
     elif task == 'mnist_shift': 
         data_root = f'{data_dir}/multimnist/'
-        train_datafile = 'mnist_overlap4pix_nodup_1fold_36width_1obj_train.pt' # train_shift_by_2pixel.pt' 
-        test_datafile= 'mnist_overlap4pix_nodup_1fold_36width_1obj_test.pt' #test_shift_by_2pixel.pt' 
+        train_datafile = 'mnist_overlap_4pix_nodup_1fold_36width_1obj_train.pt' # train_shift_by_2pixel.pt' 
+        test_datafile= 'mnist_overlap_4pix_nodup_1fold_36width_1obj_test.pt' #test_shift_by_2pixel.pt' 
         print(train_datafile, test_datafile)
 
         input_ims, ys = torch.load(data_root+train_datafile)
@@ -102,8 +102,19 @@ def fetch_dataloader(task, data_dir, device, batch_size, train=True, download=Tr
 
     elif task == 'mnist_multi': 
         data_root = f'{data_dir}/multimnist/'
-        train_datafile = 'mnist_overlap4pix_nodup_1fold_36width_2obj_train.pt'
-        test_datafile= 'mnist_overlap4pix_nodup_1fold_36width_2obj_test.pt'
+        train_datafile = 'mnist_overlap_4pix_nodup_1fold_36width_2obj_train.pt'
+        test_datafile= 'mnist_overlap_4pix_nodup_1fold_36width_2obj_test.pt'
+        print(train_datafile, test_datafile)
+
+        input_ims, ys = torch.load(data_root+train_datafile)
+        dataset1 = TensorDataset(input_ims, ys)
+        input_ims, ys = torch.load(data_root+test_datafile)
+        dataset2 = TensorDataset(input_ims, ys)   
+
+    elif task == 'mnist_multi_high': 
+        data_root = f'{data_dir}/multimnist/'
+        train_datafile = 'mnist_highoverlap_4pix_nodup_1fold_36width_2obj_train.pt'
+        test_datafile= 'mnist_highoverlap_4pix_nodup_1fold_36width_2obj_test.pt'
         print(train_datafile, test_datafile)
 
         input_ims, ys = torch.load(data_root+train_datafile)

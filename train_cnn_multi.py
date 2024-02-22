@@ -16,7 +16,7 @@ import sys
 import pprint
 from loaddata import *
 from utils import *
-
+from evaluation import topkacc
 
 # class ResBlock(nn.Module):
 #     def __init__(self, in_channels, out_channels, downsample):
@@ -233,7 +233,7 @@ def train(args, model, device, train_loader, optimizer, epoch, writer):
 #                 break
 
 
-def test(model, device, test_loader, epoch, writer):
+def test(model, device, test_loader, epoch, writer, topk):
     model.eval()
     test_loss = 0
     correct = 0
@@ -247,9 +247,14 @@ def test(model, device, test_loader, epoch, writer):
             test_loss += F.binary_cross_entropy_with_logits(output, target, reduction='sum').item()  # sum up batch loss
             
             output = torch.sigmoid(output)     #<--- since you use BCEWithLogitsLoss
-            predicted = torch.round(output)
             
-            correct += torch.all(torch.eq(predicted, target), dim=1).sum().item()
+            correct += topkacc(output, target, topk=topk).sum().item()
+            
+            # thresholding version (>0.5 = 1, <0.5 = 0)
+            # predicted = torch.round(output)
+            # correct += torch.all(torch.eq(predicted, target), dim=1).sum().item()
+             
+            # original verision (argmax)
             # correct += (predicted == target).all().sum().item()
             # pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             # correct += pred.eq(target.view_as(pred)).sum().item()
@@ -272,6 +277,7 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--cuda', '-c', help="cuda index", type= int, required=True)
     parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--num-objects', type=int, required=True)
     parser.add_argument('--expname', type=str, default='test')
 
     parser.add_argument('--output-dir', type=str, default='./results/mnist/')
@@ -391,7 +397,7 @@ def main():
         epoch_no_improve=0
         for epoch in range(1, args.epochs + 1):
             train(args, model, device, train_loader, optimizer, epoch, writer)
-            current_acc= test(model, device, test_loader, epoch, writer)
+            current_acc= test(model, device, test_loader, epoch, writer, topk=args.num_objects)
             scheduler.step()
 
             if (epoch%10==0) & (args.save_model):

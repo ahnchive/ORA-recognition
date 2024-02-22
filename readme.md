@@ -28,6 +28,9 @@ Following packages are required, full list in `requirements.txt`. Tested with py
 - tqdm
 - prettytable
 
+torch-2.2.0 torchmetrics-1.3.1
+pip install torch==1.10.1+cu111 torchvision==0.11.2+cu111 torchaudio==0.10.1 -f https://download.pytorch.org/whl/cu111/torch_stable.html
+
 
 # Replicating our experiments
 `bash run/runExperiment_our.sh`
