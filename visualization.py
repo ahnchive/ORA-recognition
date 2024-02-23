@@ -130,7 +130,7 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
     plt.tick_params(axis='both', labelsize=12)
 #     fig.suptitle('coupling coeffs', x=0.1)
     plt.tight_layout()
-    plt.savefig('binding_illustration.pdf', bbox_inches='tight', dpi=300)
+    # plt.savefig('binding_illustration.pdf', bbox_inches='tight', dpi=300)
     plt.show()    
     
 def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, fontsize=15, **imshow_kwargs):
@@ -239,7 +239,10 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             ps = max_obj_step[t]
             correct = gt==ps
             correct_step.append(correct)
-            ent = round(entropy[idx][t].cpu().item(),2)
+            if entropy is not None:
+                ent = round(entropy[idx][t].cpu().item(),2)
+            else:
+                ent = 'n/a'
             text = f'**CORRECT**: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}' if correct else f'INCORRECT: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}'
             text_step.append(text)
         
