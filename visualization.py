@@ -152,8 +152,10 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
             ax.imshow(np.asarray(img), cmap='gray', vmin=0, vmax=1, **imshow_kwargs)
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
 
+    topk = len(max_obj_step[0])
     for row_idx in range(num_rows):
-        axs[row_idx, max_obj_step[row_idx]+2].add_patch(Rectangle((0, 0), w-1, h-1, edgecolor = 'red', fill=False, lw=5))
+        for k in range(topk):
+            axs[row_idx, max_obj_step[row_idx][k]+2].add_patch(Rectangle((0, 0), w-1, h-1, edgecolor = 'red', fill=False, lw=5))
 
     if col_title is not None:
         for ax, col in zip(axs[0], col_title):
@@ -214,7 +216,8 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
     objcaps_len_step_narrow = objcaps_len_step.narrow(dim=2,start=0, length=args.num_classes)
 #     objcaps_prob_step = F.softmax(objcaps_len_step, dim=-1) #torch.Size([1000, 3, 10])
     # obj identity with max activation
-    max_act_obj = objcaps_len_step_narrow.max(dim=-1)[1] #torch.Size([1000, 3])
+    # max_act_obj = objcaps_len_step_narrow.max(dim=-1)[1] #torch.Size([1000, 3])
+    max_act_obj = torch.topk(objcaps_len_step_narrow,k=args.num_targets, dim=-1)[1] #torch.Size([1000, 3, topk])
     
     ##############################
     # plot each trial in the batch
@@ -222,13 +225,14 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
     idx_plotted = []
     
     for idx in range(start, start+n_image):
-        if num_steps_to_finish:
+        if num_steps_to_finish is not None:
             timesteps = num_steps_to_finish[idx]
         else:
             timesteps = args.time_steps
             
         # get gt and pred label info 
-        gt = y[idx].argmax(dim=0).cpu().item()
+        # gt = y[idx].argmax(dim=0).cpu().item()
+        gt = torch.topk(y[idx], k=args.num_targets, dim=-1)[1].numpy() #torch.Size([1000, topk])
         baseline = pred_to_compare[idx].item() if pred_to_compare is not None else None
         max_obj_step = list(max_act_obj[idx].cpu().detach().numpy()) # (3,)
         correct_step =[]
@@ -237,7 +241,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
 #             ps = objcaps_len_step[idx,i:i+1].squeeze(1)
 #             ps = ps.argmax(dim=1).cpu().item()
             ps = max_obj_step[t]
-            correct = gt==ps
+            correct = set(gt)==set(ps)
             correct_step.append(correct)
             if entropy is not None:
                 ent = round(entropy[idx][t].cpu().item(),2)

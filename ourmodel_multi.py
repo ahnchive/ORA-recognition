@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 
+from torch.distributions import Categorical
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import torchvision.transforms as T
@@ -744,6 +745,13 @@ class RRCapsNet(nn.Module):
         
         print(f'========================================================\n')
       
+    @staticmethod
+    def get_batch_idx_below_threshold(score, threshold):
+        T = 0.2
+        softmax = F.softmax(score/T, dim=-1) # torch.Size([1000, 10])
+        entropy = Categorical(probs = softmax).entropy() # torch.Size([1000])
+        below_threshold = entropy<threshold # torch.Size([1000])
+        return entropy, below_threshold.float()
         
     def forward(self, x):
         
@@ -761,7 +769,7 @@ class RRCapsNet(nn.Module):
         # log output; accumulate step-wise capsule length and reconstruction, # todo; change to list and concat
         objcaps_len_step = torch.zeros(batch_size, self.time_steps, self.num_objcaps, device = device)
         x_recon_step = torch.zeros(batch_size, self.time_steps, self.C, self.H, self.W, device = device)
-       
+        below_threshold = torch.zeros(batch_size, device = device)
         
         # run model forward
         for t in range(1, self.time_steps+1):
@@ -789,7 +797,7 @@ class RRCapsNet(nn.Module):
             ##################
             # attending input (based on reconstruction mask from previous step, if the param set True)
             ##################
-            x_mask, x_input = self.input_window(x, x_recon_for_mask, timestep=t) #todo what if not detached? 
+            x_mask, x_input = self.input_window(x, x_recon_for_mask, below_threshold, timestep=t) #todo what if not detached? 
      
             #############
             # encoding feature
@@ -814,6 +822,13 @@ class RRCapsNet(nn.Module):
             objcaps_len = objcaps.norm(dim=-1)  #[n_batch, n_objects]
             objcaps_len_step[:,t-1:t,:] = torch.unsqueeze(objcaps_len, 1)
 
+
+            # compute entropy and which batch is below the threshold
+            entropy, below_threshold = self.get_batch_idx_below_threshold(objcaps_len, threshold=0.10) #todo change threshold
+            if t==1: # if first step, don't use below_threshold yet
+                below_threshold = torch.zeros(batch_size, device = device)
+
+                
             ############
             # decoding reconstruction
             ############
@@ -836,7 +851,7 @@ class RRCapsNet(nn.Module):
                     # get most likely obj(s) recon based on self.num_targets
                     objcaps_len_narrow = objcaps_len.narrow(dim=1,start=0, length=self.num_classes)
                     
-                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=self.num_targets, dim=-1)                    
+                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=1, dim=-1) # construct one at a time, self.num_targets             
                     y_khot = torch.zeros(objcaps_len.size(), device= objcaps_len.device)
                     for i in range(self.num_targets): # Scatter 1's to the top-2 indices.
                         y_khot.scatter_(1, topk_indices[:, i].view(-1, 1), 1.)
@@ -973,7 +988,7 @@ def loss_fn(objcaps_len_step, y_true, x_recon_step, x, args, gtx=None, use_recon
 # Accuracy
 # ------------------
 
-def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
+def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, topk, only_acc=True):
     def get_first_zero_index(x, axis=1):
         cond = (x == 0)
         return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
@@ -990,9 +1005,12 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
 
     # get first two consecutive (diff zero) index and model predictions
     first_zero_index = get_first_zero_index(pdiff)
-    final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
-
-    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    pstep_at_first_reached_threshold = torch.stack([pstep[i, first_zero_index.flatten()[i], :] for i in range(pstep.size(0))]) #([1000, n_step, 10]) --> ([1000, 10])
+    accs = topkacc(pstep_at_first_reached_threshold, y_hot, topk=topk)
+    final_pred = pstep_at_first_reached_threshold.topk(topk, dim = -1, sorted=True)[1] # Batch x  topk
+    
+    # final_pred= torch.gather(pstep, 1, first_zero_index).flatten().to(y_hot.device)
+    # accs = torch.eq(final_pred, y_hot.max(dim=1)[1]).float()
     nstep = (first_zero_index.flatten()+1) #.cpu().numpy()
     
     if only_acc:
@@ -1002,7 +1020,7 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
 
 
 
-def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use_cumulative = False, only_acc= True):
+def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, topk, threshold=0.6, use_cumulative = False, only_acc= True):
     from torch.distributions import Categorical
 
     def get_first_true_index(boolarray, axis=1, when_no_true='final_index'):
@@ -1017,13 +1035,15 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
         else:
             return first_true_index
 
+
     if use_cumulative:
         score = objcaps_len_step_narrow.cumsum(dim=1)
-        pred = score.max(dim=-1)[1]
+        # pred = score.max(dim=-1)[1]
+        # pred = score.topk(topk, dim= -1, sorted=True)[1] 
     else:
         score = objcaps_len_step_narrow # Batch x Stepsize x Category
-        pred = score.max(dim=-1)[1] # Batch x Stepsize
-
+        # pred = score.max(dim=-1)[1]  # Batch x Stepsize
+        # pred = score.topk(topk, dim = -1, sorted=True)[1]   # Batch x Stepsize x topk
 
     # compute entropy from softmax output with Temp scale
     T=0.2
@@ -1034,11 +1054,15 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
     stop = entropy<threshold
     boolarray = (stop == True)
 
+
     # get first index that reached threshold
     first_true_index, no_stop_condition = get_first_true_index(boolarray, axis=1, when_no_true='final_index')
-
-    final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
-    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    score_at_first_reached_threshold = torch.stack([score[i, first_true_index.flatten()[i], :] for i in range(score.size(0))]) #([1000, n_step, 10]) --> ([1000, 10])
+    accs = topkacc(score_at_first_reached_threshold, y_hot, topk=topk)
+    final_pred = score_at_first_reached_threshold.topk(topk, dim = -1, sorted=True)[1] # Batch x  topk
+    
+    # final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
+    # accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
     nstep = (first_true_index.flatten()+1) #.cpu().numpy()
 
     if only_acc:
@@ -1070,11 +1094,11 @@ def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1'):
 
     if 'entropy' in acc_type:
         assert num_steps > 1, 'entropy based is used when time steps > 1'
-        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
+        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true, topk, threshold=0.6, use_cumulative = False)
     
     elif 'hypothesis' in acc_type:
         assert num_steps > 1, 'hypothesis based is used when time steps > 1'
-        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
+        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true, topk)
 
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
