@@ -22,7 +22,7 @@ import torchvision.transforms as T
 
 from utils import *
 from loaddata import *
-
+from evaluation import topkacc
 
 # --------------------
 # functions & modules
@@ -833,13 +833,20 @@ class RRCapsNet(nn.Module):
                     else:
                         x_recon_bkg = torch.zeros(x.shape, device=device)
 
-                    # get most likely obj recon
+                    # get most likely obj(s) recon based on self.num_targets
                     objcaps_len_narrow = objcaps_len.narrow(dim=1,start=0, length=self.num_classes)
-                    idx_max_obj = objcaps_len_narrow.max(dim=1)[1]
+                    
+                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=self.num_targets, dim=-1)                    
+                    y_khot = torch.zeros(objcaps_len.size(), device= objcaps_len.device)
+                    for i in range(self.num_targets): # Scatter 1's to the top-2 indices.
+                        y_khot.scatter_(1, topk_indices[:, i].view(-1, 1), 1.)
+
+                    # idx_max_obj = objcaps_len_narrow.max(dim=1)[1] # same when topk= 1
                     # idx_max_obj = obj_rscore.max(dim=1)[1]
-                    y_onehot = torch.zeros(objcaps_len.size(), device= objcaps_len.device).scatter_(1, idx_max_obj.view(-1,1), 1.)
-                    objcaps_onehot = (objcaps * y_onehot[:, :, None])
-                    x_recon_obj, h_dec = self.decoder(objcaps_onehot, h_dec) # h_dec is only used when decoder use rnn projection
+                    # y_onehot = torch.zeros(objcaps_len.size(), device= objcaps_len.device).scatter_(1, idx_max_obj.view(-1,1), 1.)
+
+                    objcaps_khot = (objcaps * y_khot[:, :, None])
+                    x_recon_obj, h_dec = self.decoder(objcaps_khot, h_dec) # h_dec is only used when decoder use rnn projection
 
                     # get final recon
                     x_recon = x_recon_obj + x_recon_bkg
@@ -966,54 +973,6 @@ def loss_fn(objcaps_len_step, y_true, x_recon_step, x, args, gtx=None, use_recon
 # Accuracy
 # ------------------
 
-def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1):
-    """
-    if one of the top2 predictions are accurate --> 1, none--> 0
-    
-    Input: 
-        - y_pred should be a vector of prediction score 
-        - y_true should be in multi-hot encoding format (one or zero; can't deal with duplicates)
-    Return: 
-        - a vector of accuracy from each image --> [n_images,]
-    """
-    with torch.no_grad():
-        topk_indices = y_pred.topk(topk, sorted=True)[1] 
-        accs = torch.gather(y_true, dim=1, index=topk_indices).sum(dim=1)
-
-    return accs
-
-def exactmatch(y_pred: torch.Tensor, y_true: torch.Tensor):
-    """
-    if y_pred and y_true matches exactly --> 1, not --> 0
-    
-    Input: torch tensor 
-        - both y_pred and y_true should be in the same format
-        e.g., if y_true is multi-hot, then y_pred should be made in multi-hot as well
-    Return: 
-        - a vector of accuracy from each image --> [n_images,]
-    """
-    with torch.no_grad():
-        accs = (y_pred == y_true).all(dim=1).float()
-    
-    return accs
-
-def partialmatch(y_pred: torch.Tensor, y_true:  torch.Tensor, n_targets=2):
-    """
-    when n_targets=2, if one of the two predictions are accurate --> 0.5, none--> 0
-    
-    Input: 
-        - y_pred should be a vector of prediction score 
-        - y_true should be in multi-hot encoding format (one or zero; can't deal with duplicates)
-    Return: 
-        - a vector of accuracy from each image --> [n_images,]
-    """
-    with torch.no_grad():
-        topk_indices = y_pred.topk(n_targets, sorted=True)[1] 
-        accs = torch.gather(y_true, dim=1, index=topk_indices).sum(dim=1)/n_targets
-
-    return accs
-
-
 def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
     def get_first_zero_index(x, axis=1):
         cond = (x == 0)
@@ -1032,8 +991,10 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
     # get first two consecutive (diff zero) index and model predictions
     first_zero_index = get_first_zero_index(pdiff)
     final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
+
     accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
     nstep = (first_zero_index.flatten()+1) #.cpu().numpy()
+    
     if only_acc:
         return accs
     else:
@@ -1085,34 +1046,36 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
     else:
         return accs, final_pred, nstep, no_stop_condition, entropy
     
-def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy', single_step=None):
+def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1'):
     '''
-    1) entropy
-    2) hypothesis
-    3) topk accuracy: format should be top@k,
+    1) entropy@k: acc measured at the step following confidence/uncertainty framework (entropy below certain threshold), topk acc used when single step 
+    2) hypothesis@k: acc measured at the step following hypothesis testing framework (two consecutive same predictions), topk acc used when single step 
+    3) topk accuracy@k: just topk acc measured at the final step
+    format should be acctype@k,
     '''
     num_classes = y_true.size(dim=1) #onehot vector
+    
     objcaps_len_step_narrow = objcaps_len_step.narrow(dim=-1,start=0, length=num_classes) # in case a background cap was added    
+    num_steps = objcaps_len_step_narrow.size(dim=1)
 
-    if acc_type == 'entropy':
-        if single_step:
-            y_pred = objcaps_len_step_narrow[:,-1]
-            accs = topkacc(y_pred, y_true, topk=1)
-        else:
-            accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
-    elif acc_type == 'hypothesis':
-        if single_step:
-            y_pred = objcaps_len_step_narrow[:,-1]
-            accs = topkacc(y_pred, y_true, topk=1)
-        else:
-            accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
-            
-    elif 'top' in acc_type:
-        # get final prediction
-        y_pred = objcaps_len_step_narrow[:,-1]
+    if '@' in acc_type:
         topk = int(acc_type.split('@')[1])
+    else:
+        topk = 1
+
+    if ('top' in acc_type) or num_steps == 1:
+        y_pred = objcaps_len_step_narrow[:,-1] # use the final step
         accs = topkacc(y_pred, y_true, topk=topk)
-        
+        return accs
+
+    if 'entropy' in acc_type:
+        assert num_steps > 1, 'entropy based is used when time steps > 1'
+        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
+    
+    elif 'hypothesis' in acc_type:
+        assert num_steps > 1, 'hypothesis based is used when time steps > 1'
+        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
+
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
         
@@ -1222,10 +1185,7 @@ def evaluate(model, x, y, args, acc_type, gtx=None):
         
         # compute batch loss and accuracy
         loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)
-        if args.time_steps==1:
-            acc = acc_fn(objcaps_len_step, y, acc_type, single_step=True)
-        else:
-            acc = acc_fn(objcaps_len_step, y, acc_type)
+        acc = acc_fn(objcaps_len_step, y, acc_type)
 
     return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step
 
