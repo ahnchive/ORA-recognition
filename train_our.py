@@ -7,7 +7,6 @@ import torch
 
 from utils import *
 from loaddata import *
-
 from ourmodel import * 
 # from rrcapsnet_writeglimpse import * 
 
