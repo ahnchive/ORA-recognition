@@ -973,7 +973,7 @@ def loss_fn(objcaps_len_step, y_true, x_recon_step, x, args, gtx=None, use_recon
 # Accuracy
 # ------------------
 
-def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
+def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, topk, only_acc=True):
     def get_first_zero_index(x, axis=1):
         cond = (x == 0)
         return ((cond.cumsum(axis) == 1) & cond).max(axis, keepdim=True)[1]
@@ -990,9 +990,12 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
 
     # get first two consecutive (diff zero) index and model predictions
     first_zero_index = get_first_zero_index(pdiff)
-    final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
-
-    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    pstep_at_first_reached_threshold = torch.stack([pstep[i, first_zero_index.flatten()[i], :] for i in range(pstep.size(0))]) #([1000, n_step, 10]) --> ([1000, 10])
+    accs = topkacc(pstep_at_first_reached_threshold, y_hot, topk=topk)
+    final_pred = pstep_at_first_reached_threshold.topk(topk, dim = -1, sorted=True)[1] # Batch x  topk
+    
+    # final_pred= torch.gather(pstep, 1, first_zero_index).flatten().to(y_hot.device)
+    # accs = torch.eq(final_pred, y_hot.max(dim=1)[1]).float()
     nstep = (first_zero_index.flatten()+1) #.cpu().numpy()
     
     if only_acc:
@@ -1002,7 +1005,7 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
 
 
 
-def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use_cumulative = False, only_acc= True):
+def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, topk, threshold=0.6, use_cumulative = False, only_acc= True):
     from torch.distributions import Categorical
 
     def get_first_true_index(boolarray, axis=1, when_no_true='final_index'):
@@ -1017,13 +1020,15 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
         else:
             return first_true_index
 
+
     if use_cumulative:
         score = objcaps_len_step_narrow.cumsum(dim=1)
-        pred = score.max(dim=-1)[1]
+        # pred = score.max(dim=-1)[1]
+        # pred = score.topk(topk, dim= -1, sorted=True)[1] 
     else:
         score = objcaps_len_step_narrow # Batch x Stepsize x Category
-        pred = score.max(dim=-1)[1] # Batch x Stepsize
-
+        # pred = score.max(dim=-1)[1]  # Batch x Stepsize
+        # pred = score.topk(topk, dim = -1, sorted=True)[1]   # Batch x Stepsize x topk
 
     # compute entropy from softmax output with Temp scale
     T=0.2
@@ -1034,11 +1039,15 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
     stop = entropy<threshold
     boolarray = (stop == True)
 
+
     # get first index that reached threshold
     first_true_index, no_stop_condition = get_first_true_index(boolarray, axis=1, when_no_true='final_index')
-
-    final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
-    accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
+    score_at_first_reached_threshold = torch.stack([score[i, first_true_index.flatten()[i], :] for i in range(score.size(0))]) #([1000, n_step, 10]) --> ([1000, 10])
+    accs = topkacc(score_at_first_reached_threshold, y_hot, topk=topk)
+    final_pred = score_at_first_reached_threshold.topk(topk, dim = -1, sorted=True)[1] # Batch x  topk
+    
+    # final_pred = torch.gather(pred, dim=1, index= first_true_index).flatten()
+    # accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
     nstep = (first_true_index.flatten()+1) #.cpu().numpy()
 
     if only_acc:
@@ -1070,11 +1079,11 @@ def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1'):
 
     if 'entropy' in acc_type:
         assert num_steps > 1, 'entropy based is used when time steps > 1'
-        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true,  threshold=0.6, use_cumulative = False)
+        accs = compute_entropy_based_acc(objcaps_len_step_narrow, y_true, topk, threshold=0.6, use_cumulative = False)
     
     elif 'hypothesis' in acc_type:
         assert num_steps > 1, 'hypothesis based is used when time steps > 1'
-        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true)
+        accs = compute_hypothesis_based_acc(objcaps_len_step_narrow, y_true, topk)
 
     else:
         raise NotImplementedError('given acc functions are not implemented yet')
