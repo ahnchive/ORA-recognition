@@ -77,6 +77,7 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
 
 #         axs[n,0].set_title(f'routing {n+1}', color='blue')
         axs[n,0].set_ylabel(f'Object caps', fontsize=15)
+        axs[n,0].set_yticks(range(len(objlabels)))
         axs[n,0].set_yticklabels(objlabels) 
         axs[n,0].set_xlabel('Feature caps', fontsize=15)
         axs[n,0].set_xticklabels([i for i in range(1,nprimary+1)])
@@ -88,11 +89,12 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
         
         # objlen before rerror
         axs[n,1].barh(ylabels,  objlen_before[n].round(2),  height=1.0, facecolor='grey', edgecolor='black')
+        axs[n,1].set_yticks(range(len(objlabels)))
         axs[n,1].set_yticklabels(objlabels) 
         axs[n,1].invert_yaxis()
         axs[n,1].set_ylabel('Object')
         axs[n,1].set_xlabel('Raw\nClass Likelihood') # capsule length before rscore applied, i.e., simple dynamic routing
-        axs[n,1].set_yticks(ylabels)
+        # axs[n,1].set_yticks(ylabels)
         axs[n,1].set_xticks([0, 0.5, 1.0])
         axs[n,1].set_xlim(0, 1.0)
         axs[n,1].spines['right'].set_visible(False)
@@ -101,11 +103,12 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
         
         # rerror
         axs[n,2].barh(ylabels,  objrscore[n][:,0].round(2),  height=1.0, facecolor='grey', edgecolor='black')
+        axs[n,2].set_yticks(range(len(objlabels)))
         axs[n,2].set_yticklabels(objlabels) 
         axs[n,2].invert_yaxis()
         axs[n,2].set_ylabel('object')
         axs[n,2].set_xlabel('Reconstruction\nScore')
-        axs[n,2].set_yticks(ylabels)
+        # axs[n,2].set_yticks(ylabels)
 #         axs[n,2].set_xticks([0, 0.5, 1.0])
 #         axs[n,2].set_xlim(0, 1.0)
         axs[n,2].spines['right'].set_visible(False)
@@ -114,11 +117,12 @@ def plot_coef(coef, objlen_before, objrscore, objlen, num_classes):
 
         #final class likelihood
         axs[n,3].barh(ylabels, objlen[n].round(2), height=1.0, facecolor='grey', edgecolor='black')
-        axs[n,3].set_yticklabels(objlabels) 
+        axs[n,2].set_yticks(range(len(objlabels)))
+        axs[n,2].set_yticklabels(objlabels) 
         axs[n,3].invert_yaxis()
         axs[n,3].set_ylabel('object')
         axs[n,3].set_xlabel('Adjusted\nClass Likelihood') # capsule length after rscore applied
-        axs[n,3].set_yticks(ylabels)
+        # axs[n,3].set_yticks(ylabels)
         axs[n,3].set_xticks([0, 0.5, 1.0])
         axs[n,3].set_xlim(0, 1.0)
         axs[n,3].spines['right'].set_visible(False)
