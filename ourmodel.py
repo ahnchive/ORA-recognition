@@ -991,7 +991,7 @@ def compute_hypothesis_based_acc(objcaps_len_step_narrow, y_hot, only_acc=True):
     # get first two consecutive (diff zero) index and model predictions
     first_zero_index = get_first_zero_index(pdiff)
     final_pred= torch.gather(pstep, 1, first_zero_index).flatten()
-    
+
     accs = torch.eq(final_pred.to(y_hot.device), y_hot.max(dim=1)[1]).float()
     nstep = (first_zero_index.flatten()+1) #.cpu().numpy()
     
@@ -1046,7 +1046,7 @@ def compute_entropy_based_acc(objcaps_len_step_narrow, y_hot, threshold=0.6, use
     else:
         return accs, final_pred, nstep, no_stop_condition, entropy
     
-def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1', single_step=None):
+def acc_fn(objcaps_len_step, y_true, acc_type= 'entropy@1'):
     '''
     1) entropy@k: acc measured at the step following confidence/uncertainty framework (entropy below certain threshold), topk acc used when single step 
     2) hypothesis@k: acc measured at the step following hypothesis testing framework (two consecutive same predictions), topk acc used when single step 
@@ -1185,10 +1185,7 @@ def evaluate(model, x, y, args, acc_type, gtx=None):
         
         # compute batch loss and accuracy
         loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)
-        if args.time_steps==1:
-            acc = acc_fn(objcaps_len_step, y, acc_type, single_step=True)
-        else:
-            acc = acc_fn(objcaps_len_step, y, acc_type)
+        acc = acc_fn(objcaps_len_step, y, acc_type)
 
     return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step
 
