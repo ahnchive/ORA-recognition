@@ -294,7 +294,8 @@ class AttentionWindow(nn.Module):
                 raise NotImplementedError("given mask type is not implemented") 
             
             x_mask = torch.ones(x.shape, device = x.device)
-            # remove x_recon from x
+            
+            # # remove x_recon from x
             x = x - x_recon
             x = torch.clip(x,0,1)
 
@@ -850,6 +851,14 @@ class RRCapsNet(nn.Module):
             ##################
             # attending input (based on reconstruction mask from previous step, if the param set True)
             ##################
+            # if t > 1:
+            #     above_threshold = 1-below_threshold
+            #     x_explained = (x - x_recon_for_mask).clone()
+            #     x_explained = torch.clip(x_explained,0,1)
+            #     x_below = x_explained*below_threshold[:,None,None,None]
+            #     x_above = x*above_threshold[:,None,None,None]
+            #     x = x_above + x_below
+
             x_mask, x_input = self.input_window(x, x_recon_for_mask, below_threshold, timestep=t) #todo what if not detached? 
      
             #############
