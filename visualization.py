@@ -19,7 +19,7 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, titl
         for col_idx in range(num_cols):
             img = imgarray[row_idx,col_idx]
             ax = axs[row_idx, col_idx]
-            if num_cols==1:
+            if col_idx==1:
                 ax.imshow(np.asarray(img), cmap='gray', vmin=0, vmax=1, **imshow_kwargs)
             else:
                 ax.imshow(np.asarray(img), cmap='gray_r', vmin=0, vmax=1, **imshow_kwargs)
@@ -158,7 +158,7 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
         for col_idx in range(num_cols):
             img = imgarray[row_idx,col_idx]
             ax = axs[row_idx, col_idx]
-            ax.imshow(np.asarray(img), cmap='gray', vmin=0, vmax=1, **imshow_kwargs)
+            ax.imshow(np.asarray(img), cmap='gray_r', vmin=0, vmax=1, **imshow_kwargs)
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
 
     topk = len(max_obj_step[0])
