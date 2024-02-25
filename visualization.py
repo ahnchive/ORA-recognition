@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from ourmodel import get_every_obj_rscore, scale_coef
 
-def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, fontsize=15, **imshow_kwargs):
+def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, title=None, fontsize=15, **imshow_kwargs):
     # row title, col title both should be vectors 
     
     if not isinstance(imgarray, np.ndarray):
@@ -19,7 +19,10 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
         for col_idx in range(num_cols):
             img = imgarray[row_idx,col_idx]
             ax = axs[row_idx, col_idx]
-            ax.imshow(np.asarray(img), cmap='gray_r', vmin=0, vmax=1, **imshow_kwargs)
+            if num_cols==1:
+                ax.imshow(np.asarray(img), cmap='gray', vmin=0, vmax=1, **imshow_kwargs)
+            else:
+                ax.imshow(np.asarray(img), cmap='gray_r', vmin=0, vmax=1, **imshow_kwargs)
             ax.set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
             
     if col_title is not None:
@@ -32,8 +35,10 @@ def plot_imgarray(imgarray, row_title=None, col_title=None, row_text =None, font
 
     if row_text is not None:
         for row_idx in range(num_rows):
-            axs[row_idx, num_cols-1].text(w+10, h-5, row_text[row_idx], fontsize=fontsize, color='black')
+            axs[row_idx, num_cols-1].text(w+5, h-5, row_text[row_idx], fontsize=fontsize, color='black')
             
+    if title is not None:
+        plt.suptitle(title, fontsize=20, ha='right')
     plt.tight_layout()
     plt.show()
     
@@ -172,14 +177,14 @@ def plot_capsules(imgarray, max_obj_step, col_title, row_title, col_text=None, f
     if col_text is not None:
         for row_idx in range(len(col_text)):
             for col_idx in range(num_cols):
-                axs[row_idx,col_idx].text(int(w/2), h+12, col_text[row_idx][col_idx], fontsize=12, color='gray', ha='center')
+                axs[row_idx,col_idx].text(int(w/2), h+15, col_text[row_idx][col_idx], fontsize=12, color='gray', ha='center')
 
     plt.tight_layout()
     plt.show()
 
 
 
-def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None, entropy=None):
+def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args, start=0, n_image=100, plot_trials_when='all', plot_routings = False, pred_to_compare=None, num_steps_to_finish=None, entropy=None, final_pred=None):
     DEVICE =x.device 
     num_objcaps = args.num_classes + args.backg_objcaps
     
@@ -236,7 +241,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
             
         # get gt and pred label info 
         # gt = y[idx].argmax(dim=0).cpu().item()
-        gt = torch.topk(y[idx], k=args.num_targets, dim=-1)[1].numpy() #torch.Size([1000, topk])
+        gt = torch.topk(y[idx], k=int(y[idx].sum().item()), dim=-1)[1].numpy() #torch.Size([1000, topk])
         baseline = pred_to_compare[idx].item() if pred_to_compare is not None else None
         max_obj_step = list(max_act_obj[idx].cpu().detach().numpy()) # (3,)
         correct_step =[]
@@ -245,14 +250,22 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
 #             ps = objcaps_len_step[idx,i:i+1].squeeze(1)
 #             ps = ps.argmax(dim=1).cpu().item()
             ps = max_obj_step[t]
-            correct = set(gt)==set(ps)
+
+            if len(ps) == 1:
+                correct = ps in gt
+            else:
+                correct = set(gt) == set(ps)
+
             correct_step.append(correct)
             if entropy is not None:
                 ent = round(entropy[idx][t].cpu().item(),2)
             else:
                 ent = 'n/a'
-            text = f'**CORRECT**: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}' if correct else f'INCORRECT: \ngt:{gt}, \nbaseline pred: {baseline}, \nour pred: {ps} \nentropy: {ent}'
+            # text = f'**CORRECT**: \ngt:{gt}\ncurrent pred: {ps}\nbaseline pred: {baseline}\nentropy: {ent}' if correct else f'INCORRECT: \ngt:{gt}\nour pred: {ps}\nbaseline pred: {baseline}\nentropy: {ent}'
+            text = f'\npred_{t+1}: {set(ps)}\nentropy: {ent}'
             text_step.append(text)
+        if final_pred is not None:
+            title = f'Groundtruth:{set(gt)} Prediction:{set(final_pred[idx].cpu().numpy())}'
         
         # plot conditional on...
 
@@ -308,7 +321,7 @@ def visualize_detail(model, x, y, outputs, x_recon_step, objcaps_len_step, args,
         plt.rcParams["figure.figsize"] = (10,2*timesteps)
         row_title = [f'step{i+1}' for i in range(timesteps)]
         col_title = ['original', 'attn mask', 'masked input', 'recon']    
-        img = plot_imgarray(np.transpose(imgarray, [0, 1, 3, 4, 2]), row_title=row_title, col_title=col_title, row_text=text_step)
+        img = plot_imgarray(np.transpose(imgarray, [0, 1, 3, 4, 2]), row_title=row_title, col_title=col_title, row_text=text_step, title=title)
         
         #######################################
         # plot stepwise capsule representation

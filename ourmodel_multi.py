@@ -225,21 +225,23 @@ class AttentionWindow(nn.Module):
                 print(f'...with mask type {self.mask_type}, threshold {self.mask_threshold}, apply_method {self.mask_apply_method}')
                 
 
-    def forward(self, x, x_recon, timestep):
+    def forward(self, x, x_recon, below_threshold, timestep):
         
         if not self.use_reconstruction_mask or timestep==1:
             x_mask = torch.ones(x.shape, device = x.device)
             x_input = x
         else:
-            ##########################
+            above_threshold = 1-below_threshold
+
+            ##########
+            # for above threshold
             # generate recon mask
-            #########################
             if self.mask_type == 'raw':
-                x_mask = x_recon
+                x_mask = x_recon.clone()
             elif self.mask_type == 'weight':
-                x_mask = scale_image(x_recon)
+                x_mask = scale_image(x_recon.clone())
             elif self.mask_type == 'bool':
-                x_mask = x_recon
+                x_mask = x_recon.clone()
     #             blurrer = T.GaussianBlur(kernel_size=5, sigma=2)
     #             x_mask = blurrer(x_mask)
 #                 x_mask_flatten = x_mask.view(x_recon.shape[0],-1)
@@ -251,9 +253,8 @@ class AttentionWindow(nn.Module):
             else:
                 raise NotImplementedError("given mask type is not implemented") 
  
-            ##########################
+
             # apply mask to input
-            #########################      
             if self.mask_apply_method == 'match':
                 x_input = x*x_mask
                 x_input = scale_image(x_input)
@@ -269,8 +270,57 @@ class AttentionWindow(nn.Module):
             else:
                 raise NotImplementedError("given mask apply method is not implemented")                
             
-        return x_mask, x_input
+            x_mask_above = x_mask*above_threshold[:,None,None,None] #([batch, 1, width, height])
+            x_input_above = x_input*above_threshold[:,None,None,None]
+            
+            #########
+            # for below threshold -- small threshold (widen the attention window) + remove previou recon from x
+            # generate recon mask
+            if self.mask_type == 'raw':
+                x_mask = x_recon.clone()
+            elif self.mask_type == 'weight':
+                x_mask = scale_image(x_recon.clone())
+            elif self.mask_type == 'bool':
+                x_mask = x_recon.clone()
+    #             blurrer = T.GaussianBlur(kernel_size=5, sigma=2)
+    #             x_mask = blurrer(x_mask)
+#                 x_mask_flatten = x_mask.view(x_recon.shape[0],-1)
+#                 qtiles = torch.quantile(x_mask_flatten, 0.5, dim=1, keepdim=True)
+#                 x_mask_flatten = x_mask_flatten>=qtiles
+#                 x_mask = x_mask_flatten.view(x_recon.shape)
 
+                x_mask = (x_mask>self.mask_threshold*0.01).float()
+            else:
+                raise NotImplementedError("given mask type is not implemented") 
+            
+            x_mask = torch.ones(x.shape, device = x.device)
+            # remove x_recon from x
+            x = x - x_recon
+            x = torch.clip(x,0,1)
+
+            # apply mask to input
+            if self.mask_apply_method == 'match':
+                x_input = x*x_mask
+                x_input = scale_image(x_input)
+            elif self.mask_apply_method == 'mismatch':
+                x_input = x*(1-x_mask)
+                x_input = scale_image(x_input)
+            elif self.mask_apply_method == 'subtract':
+                x_input = x - x_mask
+                x_input = scale_image(x_input)
+            elif self.mask_apply_method == 'add':
+                x_input = x + x_mask
+                x_input = scale_image(x_input)
+            else:
+                raise NotImplementedError("given mask apply method is not implemented")                
+            
+            x_mask_below = x_mask*below_threshold[:,None,None,None]
+            x_input_below = x_input*below_threshold[:,None,None,None]
+
+            x_mask = x_mask_above + x_mask_below
+            x_input = x_input_above + x_input_below
+
+        return x_mask, x_input
 
 
 
@@ -760,6 +810,8 @@ class RRCapsNet(nn.Module):
 
         # initialization
         x_recon_for_mask = torch.ones(x.shape, device = device)
+        below_threshold = torch.zeros(batch_size, device = device)
+
         obj_rscore = torch.zeros(batch_size, self.num_objcaps, device=device)  #torch.Size([batch, out_num_caps]), # only need for TD routing
         objcaps =torch.zeros(batch_size, self.num_objcaps, self.dim_objcaps, device=device) #todo 0.1 *torch.randn        
         # for hidden units for recurrent encoder,decoder 
@@ -769,8 +821,9 @@ class RRCapsNet(nn.Module):
         # log output; accumulate step-wise capsule length and reconstruction, # todo; change to list and concat
         objcaps_len_step = torch.zeros(batch_size, self.time_steps, self.num_objcaps, device = device)
         x_recon_step = torch.zeros(batch_size, self.time_steps, self.C, self.H, self.W, device = device)
-        below_threshold = torch.zeros(batch_size, device = device)
         
+        entropy_step = torch.zeros(batch_size, self.time_steps, device = device)
+        below_threshold_step = torch.zeros(batch_size, self.time_steps, device = device)
         # run model forward
         for t in range(1, self.time_steps+1):
             
@@ -824,10 +877,12 @@ class RRCapsNet(nn.Module):
 
 
             # compute entropy and which batch is below the threshold
-            entropy, below_threshold = self.get_batch_idx_below_threshold(objcaps_len, threshold=0.10) #todo change threshold
+            entropy, below_threshold = self.get_batch_idx_below_threshold(objcaps_len, threshold=0.6) #todo change threshold
             if t==1: # if first step, don't use below_threshold yet
                 below_threshold = torch.zeros(batch_size, device = device)
-
+            
+            entropy_step[:, t-1:t] = entropy.unsqueeze(-1)
+            below_threshold_step[:, t-1:t] = below_threshold.unsqueeze(-1)
                 
             ############
             # decoding reconstruction
@@ -851,9 +906,10 @@ class RRCapsNet(nn.Module):
                     # get most likely obj(s) recon based on self.num_targets
                     objcaps_len_narrow = objcaps_len.narrow(dim=1,start=0, length=self.num_classes)
                     
-                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=1, dim=-1) # construct one at a time, self.num_targets             
+                    topk =1
+                    topk_values, topk_indices=  torch.topk(objcaps_len_narrow, k=topk, dim=-1) # construct one at a time, self.num_targets             
                     y_khot = torch.zeros(objcaps_len.size(), device= objcaps_len.device)
-                    for i in range(self.num_targets): # Scatter 1's to the top-2 indices.
+                    for i in range(topk): # Scatter 1's to the top-2 indices.
                         y_khot.scatter_(1, topk_indices[:, i].view(-1, 1), 1.)
 
                     # idx_max_obj = objcaps_len_narrow.max(dim=1)[1] # same when topk= 1
@@ -899,7 +955,7 @@ class RRCapsNet(nn.Module):
 #                 x_recon_for_mask = torch.clip(x_recon_for_mask, max=1.0)
 #                 x_recon_for_mask = scale_image(x_recon_for_mask)
                 
-        return objcaps_len_step, x_recon_step
+        return objcaps_len_step, x_recon_step, entropy_step, below_threshold_step
 
 
 # ------------------
@@ -1141,7 +1197,7 @@ def train_epoch(model, train_dataloader, optimizer, scheduler, epoch, writer, ar
                 gtx = gtx.to(args.device)
 
             # forward pass
-            objcaps_len_step, x_recon_step = model(x)
+            objcaps_len_step, x_recon_step, _, _= model(x)
 
             # compute loss for this batch and append it to training loss
             loss, _, _ = loss_fn(objcaps_len_step, y, x_recon_step, x, args, 
@@ -1205,13 +1261,13 @@ def evaluate(model, x, y, args, acc_type, gtx=None):
     with torch.no_grad():
         
         # run model with testing data and get predictions
-        objcaps_len_step, x_recon_step = model(x)
+        objcaps_len_step, x_recon_step, entropy_step, below_threhold_step = model(x)
         
         # compute batch loss and accuracy
         loss, loss_class, loss_recon = loss_fn(objcaps_len_step, y, x_recon_step, x, args, gtx=gtx)
         acc = acc_fn(objcaps_len_step, y, acc_type)
 
-    return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step
+    return (loss, loss_class, loss_recon), acc, objcaps_len_step, x_recon_step, entropy_step, below_threhold_step
 
 
 def test(model, dataloader, args, acc_type):
@@ -1234,7 +1290,7 @@ def test(model, dataloader, args, acc_type):
             x, gtx, y = data
             
         # evaluate
-        batch_losses, batch_acc, objcaps_len_step, x_recon_step, \
+        batch_losses, batch_acc, objcaps_len_step, x_recon_step, _, _ \
         =  evaluate(model, x, y, args, acc_type, gtx)
             
         # aggregate loss and acc
@@ -1398,7 +1454,7 @@ def train_epoch_lr(model, train_dataloader, optimizer, scheduler, epoch, args):
                 gtx = gtx.to(args.device)
 
             # forward pass
-            objcaps_len_step, x_recon_step = model(x)
+            objcaps_len_step, x_recon_step, _, _ = model(x)
 
             # compute loss for this batch and append it to training loss
             loss, _, _ = loss_fn(objcaps_len_step, y, x_recon_step, x, args, 

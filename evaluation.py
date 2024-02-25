@@ -4,7 +4,7 @@ import torch
 # Accuracy
 # ------------------
 
-def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1):
+def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1, only_acc=True):
     """
     how many of topk predictions are accurate --> 1 (all topk are in labels), 0.5 (half topk are in lables), 0 (none)
     e.g., one of top2 is in gt label = 0.5    
@@ -16,10 +16,14 @@ def topkacc(y_pred: torch.Tensor, y_true:  torch.Tensor, topk=1):
         - a vector of accuracy from each image --> [n_images,]
     """
     with torch.no_grad():
-        topk_indices = y_pred.topk(topk, sorted=True)[1] 
+        topk_values, topk_indices = y_pred.topk(topk, sorted=True)
         accs = torch.gather(y_true, dim=1, index=topk_indices).sum(dim=1)
         accs = (accs/topk)
-    return accs
+
+    if only_acc:
+        return accs
+    else:
+        return accs, topk_values
 
 def exactmatch(y_pred: torch.Tensor, y_true: torch.Tensor):
     """
